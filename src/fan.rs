@@ -5,20 +5,23 @@ use embassy_stm32::{
 };
 use embassy_time::{Duration, Instant, WithTimeout};
 
+/// The variables required to initialise a Fan struct
 pub struct FanConfig<T: GeneralInstance4Channel> {
 	pub ch: SimplePwmChannel<'static, T>,
 	pub pin: AnyPin,
 	pub exti: AnyChannel,
 }
 
+/// A struct defining controls for a Fan connected to the board.
 pub struct Fan<T: GeneralInstance4Channel> {
 	ch: SimplePwmChannel<'static, T>,
 	inp: ExtiInput<'static>,
 }
 
 impl<T: GeneralInstance4Channel> Fan<T> {
+	/// Initialise and instance of a Fan
 	pub fn init(c: FanConfig<T>) -> Self {
-		let inp = ExtiInput::new(c.pin, c.exti, Pull::None);
+		let inp = ExtiInput::new(c.pin, c.exti, Pull::Down);
 		Self { ch: c.ch, inp }
 	}
 
@@ -38,8 +41,9 @@ impl<T: GeneralInstance4Channel> Fan<T> {
 		self.ch.set_duty_cycle_fully_on();
 	}
 
+	/// Calculate the current speed of the fan.
 	pub async fn rpm(&mut self) -> Option<f64> {
-		let minute_in_millis: f64 = 1_000_000.0 * 60.0;
+		let minute_in_millis: f64 = 1_000.0 * 60.0;
 		let ok = self
 			.inp
 			.wait_for_any_edge()

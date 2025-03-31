@@ -1,15 +1,15 @@
 use embassy_stm32::timer::{simple_pwm::SimplePwmChannel, GeneralInstance4Channel};
 
-pub struct HeaterConfig<T: GeneralInstance4Channel> {
+pub struct BuzzerConfig<T: GeneralInstance4Channel> {
 	pub ch: SimplePwmChannel<'static, T>,
 }
 
-pub struct Heater<T: GeneralInstance4Channel> {
+pub struct Buzzer<T: GeneralInstance4Channel> {
 	ch: SimplePwmChannel<'static, T>,
 }
 
-impl<T: GeneralInstance4Channel> Heater<T> {
-	pub fn init(mut c: HeaterConfig<T>) -> Self {
+impl<T: GeneralInstance4Channel> Buzzer<T> {
+	pub fn init(mut c: BuzzerConfig<T>) -> Self {
 		c.ch.disable();
 		Self { ch: c.ch }
 	}

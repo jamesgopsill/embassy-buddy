@@ -1,11 +1,12 @@
 use embassy_stm32::exti::Channel;
 use embassy_stm32::gpio::{OutputType, Pin};
-use embassy_stm32::peripherals::{TIM1, TIM3};
+use embassy_stm32::peripherals::{PD5, TIM1, TIM2, TIM3, USART2};
 use embassy_stm32::time::khz;
 use embassy_stm32::timer::simple_pwm::{PwmPin, SimplePwm};
 use embassy_stm32::{adc::AdcChannel, peripherals::ADC1, Peripherals};
 
 use crate::board::BOARD;
+use crate::buzzer::BuzzerConfig;
 use crate::fan::FanConfig;
 use crate::filament_sensor::FilamentSensorConfig;
 use crate::heater::HeaterConfig;
@@ -15,6 +16,7 @@ use crate::rotary_encoder::RotaryEncoderConfig;
 use crate::thermistor::ThermistorConfig;
 use crate::tmc2209::TMC2209Config;
 
+/// Defines a configuration for the board
 pub struct Config {
 	pub adc1: ADC1,
 	pub thermistors: ThermistorsConfig,
@@ -23,10 +25,13 @@ pub struct Config {
 	pub rotary: RotaryConfig,
 	pub fans: FansConfig,
 	pub heaters: HeatersConfig,
+	pub stepper_uart: UartConfig,
 	pub steppers: SteppersConfig,
+	pub buzzer: BuzzerConfig<TIM2>,
 }
 
 impl Config {
+	/// Provides the default configuration for the Prusa Mini.
 	pub fn mini(p: Peripherals) -> Self {
 		// ### Thermistors ###
 		let max_adc_sample = (1 << 12) - 1;
@@ -133,6 +138,19 @@ impl Config {
 			bed: bed_heater_config,
 			hotend: hotend_heater_config,
 		};
+		// ## Buzzer ##
+		let buzzer = PwmPin::new_ch1(p.PA0, OutputType::PushPull);
+		let pwm = SimplePwm::new(
+			p.TIM2,
+			Some(buzzer),
+			None,
+			None,
+			None,
+			khz(21),
+			Default::default(),
+		);
+		let channels = pwm.split();
+		let buzzer = BuzzerConfig { ch: channels.ch1 };
 		// ## Stepper Motors ##
 		let stepper_x = TMC2209Config {
 			address: 1,
@@ -174,6 +192,11 @@ impl Config {
 			e: stepper_e,
 		};
 
+		let stepper_uart = UartConfig {
+			uart: p.USART2,
+			tx: p.PD5,
+		};
+
 		Self {
 			adc1: p.ADC1,
 			thermistors,
@@ -183,6 +206,8 @@ impl Config {
 			fans,
 			heaters,
 			steppers,
+			stepper_uart,
+			buzzer,
 		}
 	}
 }
@@ -213,4 +238,9 @@ pub struct SteppersConfig {
 	pub y: TMC2209Config,
 	pub z: TMC2209Config,
 	pub e: TMC2209Config,
+}
+
+pub struct UartConfig {
+	pub uart: USART2,
+	pub tx: PD5,
 }

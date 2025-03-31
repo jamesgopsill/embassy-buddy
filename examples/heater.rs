@@ -6,7 +6,7 @@ use defmt_rtt as _;
 use embassy_buddy::{heater::Heater, thermistor::Thermistor, Board, BuddyMutex};
 use embassy_executor::Spawner;
 use embassy_stm32::peripherals::TIM3;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -27,10 +27,10 @@ pub async fn report_temp(
 		{
 			let mut guard = thermistor.lock().await;
 			let t = guard.as_mut().unwrap();
-			let t = t.last_recorded_temperature();
+			let t = t.read_temperature().await;
 			info!("[{}] T [K]: {}", label, t);
 		}
-		Timer::after(Duration::from_millis(500)).await;
+		Timer::after_millis(500).await;
 	}
 }
 
@@ -39,9 +39,11 @@ pub async fn heat_and_stop(heater: &'static BuddyMutex<Heater<TIM3>>) {
 	let mut guard = heater.lock().await;
 	let heater = guard.as_mut().unwrap();
 	Timer::after_secs(5).await;
+	info!("Heat On");
 	heater.enable().await;
 	heater.set_duty_cycle_fully_on().await;
-	Timer::after_secs(10).await;
+	Timer::after_secs(20).await;
+	info!("Heat Off");
 	heater.set_duty_cycle_fully_off().await;
 	heater.disable().await;
 }

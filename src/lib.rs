@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 #![no_std]
 
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, mutex::Mutex};
@@ -6,6 +7,7 @@ pub type BuddyMutex<T> = Mutex<ThreadModeRawMutex, Option<T>>;
 
 pub mod board;
 pub use board::Board;
+pub mod buzzer;
 pub mod config;
 pub mod fan;
 pub mod filament_sensor;

@@ -6,14 +6,16 @@ use defmt_rtt as _;
 use embassy_buddy::{fan::Fan, Board, BuddyMutex};
 use embassy_executor::Spawner;
 use embassy_stm32::peripherals::TIM1;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
 	let p = embassy_stm32::init(Default::default());
+	// Initialise the board in the Prusa Mini state.
 	let board = Board::default_mini(p).await;
 
+	// Spawn the tasks.
 	spawner.must_spawn(cycle(&board.fan_0, "Fan 0"));
 	spawner.must_spawn(cycle(&board.fan_1, "Fan 1"));
 	spawner.must_spawn(speed_camera(&board.fan_0, "Fan 0"));
@@ -24,7 +26,14 @@ async fn main(spawner: Spawner) {
 pub async fn cycle(
 	fan: &'static BuddyMutex<Fan<TIM1>>,
 	label: &'static str,
-) -> ! {
+) {
+	{
+		let mut guard = fan.lock().await;
+		let fan = guard.as_mut().unwrap();
+		fan.enable().await;
+		info!("[{}] Enabled", label);
+	}
+	let mut n = 0;
 	loop {
 		{
 			let mut guard = fan.lock().await;
@@ -32,14 +41,24 @@ pub async fn cycle(
 			fan.set_duty_cycle_fully_on().await;
 			info!("[{}] On", label);
 		}
-		Timer::after(Duration::from_millis(4_000)).await;
+		Timer::after_secs(4).await;
 		{
 			let mut guard = fan.lock().await;
 			let fan = guard.as_mut().unwrap();
 			fan.set_duty_cycle_fully_off().await;
 			info!("[{}] Off", label);
 		}
-		Timer::after(Duration::from_millis(4_000)).await;
+		Timer::after_secs(4).await;
+		n += 1;
+		if n > 3 {
+			break;
+		}
+	}
+	{
+		let mut guard = fan.lock().await;
+		let fan = guard.as_mut().unwrap();
+		fan.disable().await;
+		info!("[{}] Disabled", label);
 	}
 }
 
@@ -56,5 +75,6 @@ pub async fn speed_camera(
 				info!("[{}] RPM: {}", label, rpm);
 			}
 		}
+		Timer::after_millis(250).await;
 	}
 }

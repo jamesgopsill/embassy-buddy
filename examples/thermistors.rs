@@ -5,7 +5,7 @@ use defmt::*;
 use defmt_rtt as _;
 use embassy_buddy::{thermistor::Thermistor, Board, BuddyMutex};
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
+use embassy_time::Timer;
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -27,9 +27,9 @@ pub async fn report_temp(
 		{
 			let mut guard = thermistor.lock().await;
 			let t = guard.as_mut().unwrap();
-			let t = t.last_recorded_temperature();
+			let t = t.read_temperature().await;
 			info!("{} T [K]: {}", label, t);
 		}
-		Timer::after(Duration::from_millis(2_000)).await;
+		Timer::after_secs(2).await;
 	}
 }

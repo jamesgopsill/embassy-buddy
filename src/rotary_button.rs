@@ -14,7 +14,7 @@ pub struct RotaryButton {
 
 impl RotaryButton {
 	pub fn init(c: RotaryButtonConfig) -> Self {
-		let input = ExtiInput::new(c.pin, c.exti, Pull::None);
+		let input = ExtiInput::new(c.pin, c.exti, Pull::Up);
 		Self { input }
 	}
 

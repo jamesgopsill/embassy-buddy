@@ -1,14 +1,15 @@
 use embassy_stm32::{
 	adc::Adc,
 	mode::Blocking,
-	peripherals::{ADC1, TIM1, TIM3},
-	usart::Uart,
+	peripherals::{ADC1, TIM1, TIM2, TIM3},
+	usart::{Config as UartConfig, HalfDuplexConfig, HalfDuplexReadback, Uart},
 	Peripherals,
 };
 use embassy_sync::mutex::Mutex;
 use packed_struct::PackedStructSlice;
 
 use crate::{
+	buzzer::Buzzer,
 	config::Config,
 	fan::Fan,
 	filament_sensor::FilamentSensor,
@@ -60,6 +61,7 @@ pub(crate) static BOARD: Board = Board {
 	steppers: &STEPPERS,
 	thermistors: &THERMISTORS,
 	rotary: &ROTARY,
+	buzzer: Mutex::new(None),
 };
 
 pub struct Steppers {
@@ -99,6 +101,7 @@ pub struct Board {
 	pub steppers: &'static Steppers,
 	pub thermistors: &'static Thermistors,
 	pub rotary: &'static Rotary,
+	pub buzzer: BuddyMutex<Buzzer<TIM2>>,
 }
 
 impl Board {
@@ -110,18 +113,32 @@ impl Board {
 	}
 
 	pub async fn init(c: Config) -> &'static Self {
+		*(BOARD.buzzer.lock().await) = Some(Buzzer::init(c.buzzer));
 		*(BOARD.adc1.lock().await) = Some(Adc::new(c.adc1));
 		*(BOARD.thermistors.bed.lock().await) = Some(Thermistor::init(c.thermistors.bed));
 		*(BOARD.thermistors.board.lock().await) = Some(Thermistor::init(c.thermistors.board));
 		*(BOARD.thermistors.hotend.lock().await) = Some(Thermistor::init(c.thermistors.hotend));
-		*(BOARD.pinda.lock().await) = Some(Pinda::init(c.pinda));
 		*(BOARD.filament_sensor.lock().await) = Some(FilamentSensor::init(c.filament_sensor));
+		*(BOARD.pinda.lock().await) = Some(Pinda::init(c.pinda));
 		*(BOARD.rotary.button.lock().await) = Some(RotaryButton::init(c.rotary.button));
 		*(BOARD.rotary.encoder.lock().await) = Some(RotaryEncoder::init(c.rotary.encoder));
 		*(BOARD.fan_0.lock().await) = Some(Fan::init(c.fans.fan_0));
 		*(BOARD.fan_1.lock().await) = Some(Fan::init(c.fans.fan_1));
 		*(BOARD.heaters.bed.lock().await) = Some(Heater::init(c.heaters.bed));
 		*(BOARD.heaters.hotend.lock().await) = Some(Heater::init(c.heaters.hotend));
+
+		// Stepper Uart
+		let uart_config = UartConfig::default();
+		let uart = Uart::new_blocking_half_duplex(
+			c.stepper_uart.uart,
+			c.stepper_uart.tx,
+			uart_config,
+			HalfDuplexReadback::NoReadback,
+			HalfDuplexConfig::PushPull,
+		)
+		.unwrap();
+		uart.set_baudrate(115_200).unwrap();
+		*(BOARD.stepper_uart.lock().await) = Some(uart);
 
 		// Steppers
 		let mut x = TMC2209::init(c.steppers.x).await.unwrap();

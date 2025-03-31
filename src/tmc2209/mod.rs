@@ -147,7 +147,6 @@ impl TMC2209 {
 
 		// Step 3. Check the ifcnt again (TODO: index wraparound)
 		let ifcnt_after = self.read_ifcnt().await?;
-		info!("After: {}", ifcnt_after.cnt);
 
 		if ifcnt_after.cnt > ifcnt_before.cnt {
 			Ok(())

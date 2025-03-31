@@ -1,26 +1,57 @@
 # embassy-buddy
 
-A Board Support Crate (BSP) for the Prusa Buddy board that powers the Prusa Mini. The crate is still under active development.
+A Board Support Crate (BSP) for the Prusa Buddy board that powers the Prusa Mini. The crate is **still in development**.
 
 # Example
 
-```Rust
+Examples can be found in the `examples` folder on GitHub. These can be run using:
 
 ```
+cargo run --example buzzer
+```
 
-More examples can be found in the `examples` folder.
+And here is the `examples/buzzer.rs`.
 
-# Documentation
+```Rust
+#![no_std]
+#![no_main]
 
-- [Crate Documentation]() on docs.rs.
-- [Buddy Rust]() - A book detailing the crates development.
-- [Impl Buddy Rust]() - A Youtube series documenting the crates development.
+use defmt::*;
+use defmt_rtt as _;
+use embassy_buddy::{buzzer::Buzzer, Board, BuddyMutex};
+use embassy_executor::Spawner;
+use embassy_stm32::peripherals::TIM2;
+use embassy_time::Timer;
+use panic_probe as _;
 
-# Roadmap
+#[embassy_executor::main]
+async fn main(spawner: Spawner) {
+	let p = embassy_stm32::init(Default::default());
+	let board = Board::default_mini(p).await;
 
-| Feature | Description | Status |
-|---|---|---|
-| | | |
+	spawner.must_spawn(buzz(&board.buzzer));
+}
+
+#[embassy_executor::task()]
+pub async fn buzz(buzzer: &'static BuddyMutex<Buzzer<TIM2>>) {
+	let mut guard = buzzer.lock().await;
+	let buzzer = guard.as_mut().unwrap();
+	buzzer.enable().await;
+	let mut n = 0;
+	loop {
+		info!("Buzz");
+		buzzer.set_duty_cycle_fraction(1, 2).await;
+		Timer::after_millis(100).await;
+		buzzer.set_duty_cycle_fully_off().await;
+		Timer::after_secs(1).await;
+		n += 1;
+		if n > 5 {
+			break;
+		}
+	}
+	info!("Buzz Finished");
+}
+```
 
 # Support
 
@@ -40,6 +71,19 @@ The trust element is required in order to prove that the AIgents are who they sa
 
 We have selected Rust as the language for the entire reference model stack oweing to its memory-safety, performance, and we can use it for embedded systems, desktop, webapp, and server-side applications.
 
-# Contributing
+# Contribute
 
-# Shout-Outs
+Sure, send me a message.
+
+# Shout-Outs and References
+
+- Prusa and the opensource/hardware software reposoitories
+	- [Prusa Buddy Firmware](https://github.com/prusa3d/Prusa-Firmware-Buddy)
+	- [Prusa Buddy Board Documentation](https://github.com/prusa3d/Buddy-board-MINI-PCB)
+- The [Embassy](https://embassy.dev/) crate and all its examples.
+- Youtubers showing me how to Rust.
+	- [Jon Gjengset](https://www.youtube.com/@jonhoo)
+	- [The Rusty Bits](https://www.youtube.com/@therustybits)
+	- [Floodplain](https://www.youtube.com/@floodplainnl)
+- [TM2209 Datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.08.pdf)
+- [Embedded Rustacean Blog](https://www.theembeddedrustacean.com/)
