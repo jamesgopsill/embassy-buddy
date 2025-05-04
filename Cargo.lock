@@ -387,6 +387,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-tmc"
+version = "0.1.0"
+dependencies = [
+ "defmt",
+ "embassy-sync",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-io-async",
+ "packed_struct",
+ "thiserror",
+]
+
+[[package]]
 name = "embassy-usb-driver"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -416,9 +429,14 @@ dependencies = [
  "defmt",
  "defmt-rtt",
  "embassy-executor",
+ "embassy-futures",
  "embassy-stm32",
  "embassy-sync",
  "embassy-time",
+ "embassy-tmc",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-io-async",
  "libm",
  "packed_struct",
  "panic-probe",
