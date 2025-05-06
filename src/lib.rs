@@ -2,23 +2,24 @@
 #![no_std]
 
 use components::{
-    buzzer::Buzzer, fan::Fan, filament_sensor::FilamentSensor, pinda::Pinda,
+    buzzer::Buzzer, fan::Fan, filament_sensor::FilamentSensor, heater::Heater, pinda::Pinda,
     rotary_button::RotaryButton, rotary_encoder::RotaryEncoder, thermistor::Thermistor,
 };
 use embassy_stm32::{
+    Peripherals,
     adc::{Adc, AdcChannel},
     bind_interrupts,
     exti::ExtiInput,
     gpio::{Input, Level, Output, OutputType, Pull, Speed},
     peripherals::{
-        ADC1, EXTI1, EXTI10, EXTI12, EXTI13, EXTI14, EXTI15, EXTI2, EXTI4, EXTI5, EXTI8, PA0, PA15,
-        PA4, PA5, PA8, PB4, PC0, PD0, PD1, PD10, PD12, PD13, PD14, PD15, PD2, PD3, PD4, PD8, PD9,
-        PE1, PE10, PE11, PE12, PE13, PE14, PE15, PE2, PE5, PE9, TIM1, TIM2, USART2,
+        ADC1, EXTI1, EXTI2, EXTI4, EXTI5, EXTI8, EXTI10, EXTI12, EXTI13, EXTI14, EXTI15, PA0, PA4,
+        PA5, PA8, PA15, PB0, PB1, PB4, PC0, PD0, PD1, PD2, PD3, PD4, PD8, PD9, PD10, PD12, PD13,
+        PD14, PD15, PE1, PE2, PE5, PE9, PE10, PE11, PE12, PE13, PE14, PE15, TIM1, TIM2, TIM3,
+        USART2,
     },
     time::khz,
     timer::simple_pwm::{PwmPin, SimplePwm, SimplePwmChannel},
     usart::{BufferedInterruptHandler, BufferedUart, Config, HalfDuplexConfig, HalfDuplexReadback},
-    Peripherals,
 };
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, mutex::Mutex};
 use embassy_tmc::{errors::TMCError, tmc2209::TMC2209AsyncUart};
@@ -32,12 +33,13 @@ pub type BuddyRotaryButton<'a> = BuddyMutex<RotaryButton<ExtiInput<'a>>>;
 pub type BuddyThermistor<'a, 'b> = BuddyMutex<Thermistor<'a, 'b>>;
 pub type BuddyRotaryEncoder<'a> = BuddyMutex<RotaryEncoder<ExtiInput<'a>>>;
 pub type BuddyBuzzer<'a> = BuddyMutex<Buzzer<SimplePwmChannel<'a, TIM2>>>;
-type BuddyStepperInterrupt<'a, 'b> = BuddyMutex<
+pub type BuddyStepperInterrupt<'a, 'b> = BuddyMutex<
     TMC2209AsyncUart<'a, Output<'a>, ExtiInput<'a>, ThreadModeRawMutex, BufferedUart<'b>>,
 >;
-type BuddyStepperInput<'a, 'b> =
+pub type BuddyStepperInput<'a, 'b> =
     BuddyMutex<TMC2209AsyncUart<'a, Output<'a>, Input<'a>, ThreadModeRawMutex, BufferedUart<'b>>>;
-type BuddyFan<'a> = BuddyMutex<Fan<SimplePwmChannel<'a, TIM1>, ExtiInput<'a>>>;
+pub type BuddyFan<'a> = BuddyMutex<Fan<SimplePwmChannel<'a, TIM1>, ExtiInput<'a>>>;
+pub type BuddyHeater<'a> = BuddyMutex<Heater<SimplePwmChannel<'a, TIM3>>>;
 
 bind_interrupts!(struct Irqs {
     USART2 => BufferedInterruptHandler<USART2>;
@@ -55,6 +57,8 @@ pub struct BoardOwned {
     pub pa5: PA5,
     pub pa8: PA8,
     pub pa15: PA15,
+    pub pb0: PB0,
+    pub pb1: PB1,
     pub pb4: PB4,
     pub pc0: PC0,
     pub pd0: PD0,
@@ -91,6 +95,7 @@ pub struct BoardOwned {
     pub exti15: EXTI15,
     pub tim1: TIM1,
     pub tim2: TIM2,
+    pub tim3: TIM3,
 }
 
 pub struct BoardShared<'a> {
@@ -109,6 +114,8 @@ pub fn board_config<'a>(
         pa5: p.PA5,
         pa8: p.PA8,
         pa15: p.PA15,
+        pb0: p.PB0,
+        pb1: p.PB1,
         pb4: p.PB4,
         pc0: p.PC0,
         pd0: p.PD0,
@@ -145,6 +152,7 @@ pub fn board_config<'a>(
         exti15: p.EXTI15,
         tim1: p.TIM1,
         tim2: p.TIM2,
+        tim3: p.TIM3,
     };
     let adc1 = Mutex::new(Adc::new(p.ADC1));
     let config = Config::default();
@@ -183,6 +191,11 @@ pub struct Fans<'a> {
     pub fan_1: BuddyFan<'a>,
 }
 
+pub struct Heaters<'a> {
+    pub bed: BuddyHeater<'a>,
+    pub hotend: BuddyHeater<'a>,
+}
+
 pub struct Board<'a, 'b> {
     pub pinda_sensor: BuddyPindaSensor<'a>,
     pub filament_sensor: BuddyFilamentSensor<'a>,
@@ -192,6 +205,7 @@ pub struct Board<'a, 'b> {
     pub thermistors: Thermistors<'a, 'b>,
     pub steppers: Steppers<'a, 'b>,
     pub fans: Fans<'a>,
+    pub heaters: Heaters<'a>,
 }
 
 impl<'a, 'b> Board<'a, 'b> {
@@ -265,6 +279,8 @@ impl<'a, 'b> Board<'a, 'b> {
             owned.tim1,
         );
 
+        let heaters = Self::init_heaters(owned.pb0, owned.pb1, owned.tim3);
+
         Self {
             buzzer: Mutex::new(buzzer),
             pinda_sensor: Mutex::new(pinda_sensor),
@@ -274,6 +290,7 @@ impl<'a, 'b> Board<'a, 'b> {
             thermistors,
             steppers,
             fans,
+            heaters,
         }
     }
 
@@ -511,6 +528,31 @@ impl<'a, 'b> Board<'a, 'b> {
         Fans {
             fan_0: Mutex::new(fan_0),
             fan_1: Mutex::new(fan_1),
+        }
+    }
+
+    pub fn init_heaters(
+        bed: PB0,
+        hotend: PB1,
+        tim: TIM3,
+    ) -> Heaters<'a> {
+        let bed_pin = PwmPin::new_ch3(bed, OutputType::PushPull);
+        let hotend_pin = PwmPin::new_ch4(hotend, OutputType::PushPull);
+        let pwm = SimplePwm::new(
+            tim,
+            None,
+            None,
+            Some(bed_pin),
+            Some(hotend_pin),
+            khz(21),
+            Default::default(),
+        );
+        let channels = pwm.split();
+        let bed = Heater::new(channels.ch3);
+        let hotend = Heater::new(channels.ch4);
+        Heaters {
+            bed: Mutex::new(bed),
+            hotend: Mutex::new(hotend),
         }
     }
 }
