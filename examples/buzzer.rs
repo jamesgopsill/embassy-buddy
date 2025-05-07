@@ -1,51 +1,40 @@
 #![no_std]
 #![no_main]
 
-use cortex_m::asm::nop;
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::Board;
+use embassy_buddy::{Board, BuddyStepperInterrupt, components::buzzer::Buzzer};
 use embassy_executor::Spawner;
-use embassy_stm32::{exti::ExtiInput, gpio::Output, usart::BufferedUart};
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
+use embassy_stm32::{peripherals::TIM2, timer::simple_pwm::SimplePwmChannel};
 use embassy_time::Timer;
-use embassy_tmc::{direction::Direction, tmc2209::TMC2209AsyncUart};
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
     let p = embassy_stm32::init(Default::default());
-
-    let mut tx_buf = [0u8; 16];
-    let mut rx_buf = [0u8; 16];
-    let (owned, shared) = Board::config(p, &mut tx_buf, &mut rx_buf);
-
-    let mut stepper = Board::init_x_stepper(
-        owned.pd3,
-        owned.pd1,
-        owned.pd0,
-        owned.pe2,
-        owned.exti2,
-        &shared.usart,
-    );
-
-    let ioin = stepper.read_ioin().await.unwrap();
-    info!("Ioin enn: {}", ioin.enn);
-
-    let fut = back_and_forth(&mut stepper);
+    let mut buzzer = Board::init_buzzer(p.PA0, p.TIM2);
+    let fut = buzz(&mut buzzer);
     fut.await;
 }
 
-async fn back_and_forth(
-    stepper: &mut TMC2209AsyncUart<
-        '_,
-        Output<'_>,
-        ExtiInput<'_>,
-        ThreadModeRawMutex,
-        BufferedUart<'_>,
-    >
-) -> ! {
+async fn buzz(buzzer: &mut Buzzer<SimplePwmChannel<'_, TIM2>>) {
+    let mut n = 0;
+    loop {
+        info!("Buzz");
+        buzzer.set_duty_cycle_fraction(1, 2).await;
+        Timer::after_millis(100).await;
+        buzzer.set_duty_cycle_fully_off().await;
+        Timer::after_secs(1).await;
+        n += 1;
+        if n > 5 {
+            break;
+        }
+    }
+    info!("Buzz Finished");
+}
+
+async fn back_and_forth(stepper: &mut BuddyStepperInterrupt<'_, '_>) -> ! {
     stepper.enable();
     info!("Stepper Enabled");
     let mut n = 0;

@@ -5,6 +5,7 @@ use components::{
     buzzer::Buzzer, fan::Fan, filament_sensor::FilamentSensor, heater::Heater, pinda::Pinda,
     rotary_button::RotaryButton, rotary_encoder::RotaryEncoder, thermistor::Thermistor,
 };
+use defmt::info;
 use embassy_stm32::{
     Peripherals,
     adc::{Adc, AdcChannel},
@@ -103,76 +104,6 @@ pub struct BoardShared<'a> {
     pub usart: BuddyMutex<BufferedUart<'a>>,
 }
 
-pub fn board_config<'a>(
-    p: Peripherals,
-    tx_buf: &'a mut [u8; 16],
-    rx_buf: &'a mut [u8; 16],
-) -> (BoardOwned, BoardShared<'a>) {
-    let owned = BoardOwned {
-        pa0: p.PA0,
-        pa4: p.PA4,
-        pa5: p.PA5,
-        pa8: p.PA8,
-        pa15: p.PA15,
-        pb0: p.PB0,
-        pb1: p.PB1,
-        pb4: p.PB4,
-        pc0: p.PC0,
-        pd0: p.PD0,
-        pd1: p.PD1,
-        pd2: p.PD2,
-        pd3: p.PD3,
-        pd4: p.PD4,
-        pd8: p.PD8,
-        pd9: p.PD9,
-        pd10: p.PD10,
-        pd12: p.PD12,
-        pd13: p.PD13,
-        pd14: p.PD14,
-        pd15: p.PD15,
-        pe1: p.PE1,
-        pe2: p.PE2,
-        pe5: p.PE5,
-        pe9: p.PE9,
-        pe10: p.PE10,
-        pe11: p.PE11,
-        pe12: p.PE12,
-        pe14: p.PE14,
-        pe13: p.PE13,
-        pe15: p.PE15,
-        exti1: p.EXTI1,
-        exti2: p.EXTI2,
-        exti4: p.EXTI4,
-        exti5: p.EXTI5,
-        exti8: p.EXTI8,
-        exti10: p.EXTI10,
-        exti12: p.EXTI12,
-        exti13: p.EXTI13,
-        exti14: p.EXTI14,
-        exti15: p.EXTI15,
-        tim1: p.TIM1,
-        tim2: p.TIM2,
-        tim3: p.TIM3,
-    };
-    let adc1 = Mutex::new(Adc::new(p.ADC1));
-    let config = Config::default();
-    let usart = BufferedUart::new_half_duplex(
-        p.USART2,
-        p.PD5,
-        Irqs,
-        tx_buf,
-        rx_buf,
-        config,
-        HalfDuplexReadback::Readback,
-        HalfDuplexConfig::PushPull,
-    )
-    .unwrap();
-    usart.set_baudrate(9_600).unwrap();
-    let usart = Mutex::new(usart);
-    let shared = BoardShared { adc1, usart };
-    (owned, shared)
-}
-
 pub struct Thermistors<'a, 'b> {
     pub bed: BuddyThermistor<'a, 'b>,
     pub board: BuddyThermistor<'a, 'b>,
@@ -227,7 +158,8 @@ impl<'a, 'b> Board<'a, 'b> {
             bed: Mutex::new(bed),
             hotend: Mutex::new(hotend),
         };
-        let mut x = Self::init_x_stepper(
+
+        let x = Self::init_x_stepper(
             owned.pd3,
             owned.pd1,
             owned.pd0,
@@ -236,9 +168,9 @@ impl<'a, 'b> Board<'a, 'b> {
             &shared.usart,
         );
         // TODO handle error
-        Self::configure_stepper(&mut x).await.unwrap();
+        //Self::configure_stepper(&mut x).await.unwrap();
 
-        let mut y = Self::init_y_stepper(
+        let y = Self::init_y_stepper(
             owned.pd14,
             owned.pd13,
             owned.pd12,
@@ -247,9 +179,9 @@ impl<'a, 'b> Board<'a, 'b> {
             &shared.usart,
         );
         // TODO handle error
-        Self::configure_stepper(&mut y).await.unwrap();
+        // Self::configure_stepper(&mut y).await.unwrap();
 
-        let mut z = Self::init_z_stepper(
+        let z = Self::init_z_stepper(
             owned.pd2,
             owned.pd4,
             owned.pd15,
@@ -258,7 +190,7 @@ impl<'a, 'b> Board<'a, 'b> {
             &shared.usart,
         );
         // TODO handle error
-        Self::configure_stepper(&mut z).await.unwrap();
+        //Self::configure_stepper(&mut z).await.unwrap();
 
         let e = Self::init_e_stepper(owned.pd10, owned.pd9, owned.pd8, owned.pa15, &shared.usart);
 
@@ -308,7 +240,8 @@ impl<'a, 'b> Board<'a, 'b> {
             khz(21),
             Default::default(),
         );
-        let channels = pwm.split();
+        let mut channels = pwm.split();
+        channels.ch1.enable();
         Buzzer::new(channels.ch1)
     }
 
@@ -463,6 +396,7 @@ impl<'a, 'b> Board<'a, 'b> {
             BufferedUart<'b>,
         >
     ) -> Result<(), TMCError> {
+        info!("Configuring Stepper Motors");
         // Configuration copied from Prusa Buddy Marlin Firmware
         // TODO: Finish the configuration porting across from their config.
 
@@ -522,7 +456,9 @@ impl<'a, 'b> Board<'a, 'b> {
         );
         let fan_0_exti = ExtiInput::new(fan_0_inp, fan_0_exti, Pull::Down);
         let fan_1_exti = ExtiInput::new(fan_1_inp, fan_1_exti, Pull::Down);
-        let channels = pwm.split();
+        let mut channels = pwm.split();
+        channels.ch1.enable();
+        channels.ch2.enable();
         let fan_0 = Fan::new(channels.ch2, fan_0_exti);
         let fan_1 = Fan::new(channels.ch1, fan_1_exti);
         Fans {
@@ -554,6 +490,80 @@ impl<'a, 'b> Board<'a, 'b> {
             bed: Mutex::new(bed),
             hotend: Mutex::new(hotend),
         }
+    }
+
+    pub fn init_adc1(adc: ADC1) -> Adc<'a, ADC1> {
+        Adc::new(adc)
+    }
+
+    pub fn config(
+        p: Peripherals,
+        tx_buf: &'a mut [u8; 16],
+        rx_buf: &'a mut [u8; 16],
+    ) -> (BoardOwned, BoardShared<'a>) {
+        let owned = BoardOwned {
+            pa0: p.PA0,
+            pa4: p.PA4,
+            pa5: p.PA5,
+            pa8: p.PA8,
+            pa15: p.PA15,
+            pb0: p.PB0,
+            pb1: p.PB1,
+            pb4: p.PB4,
+            pc0: p.PC0,
+            pd0: p.PD0,
+            pd1: p.PD1,
+            pd2: p.PD2,
+            pd3: p.PD3,
+            pd4: p.PD4,
+            pd8: p.PD8,
+            pd9: p.PD9,
+            pd10: p.PD10,
+            pd12: p.PD12,
+            pd13: p.PD13,
+            pd14: p.PD14,
+            pd15: p.PD15,
+            pe1: p.PE1,
+            pe2: p.PE2,
+            pe5: p.PE5,
+            pe9: p.PE9,
+            pe10: p.PE10,
+            pe11: p.PE11,
+            pe12: p.PE12,
+            pe14: p.PE14,
+            pe13: p.PE13,
+            pe15: p.PE15,
+            exti1: p.EXTI1,
+            exti2: p.EXTI2,
+            exti4: p.EXTI4,
+            exti5: p.EXTI5,
+            exti8: p.EXTI8,
+            exti10: p.EXTI10,
+            exti12: p.EXTI12,
+            exti13: p.EXTI13,
+            exti14: p.EXTI14,
+            exti15: p.EXTI15,
+            tim1: p.TIM1,
+            tim2: p.TIM2,
+            tim3: p.TIM3,
+        };
+        let adc1 = Mutex::new(Board::init_adc1(p.ADC1));
+        let config = Config::default();
+        let usart = BufferedUart::new_half_duplex(
+            p.USART2,
+            p.PD5,
+            Irqs,
+            tx_buf,
+            rx_buf,
+            config,
+            HalfDuplexReadback::Readback,
+            HalfDuplexConfig::PushPull,
+        )
+        .unwrap();
+        usart.set_baudrate(9_600).unwrap();
+        let usart = Mutex::new(usart);
+        let shared = BoardShared { adc1, usart };
+        (owned, shared)
     }
 }
 
