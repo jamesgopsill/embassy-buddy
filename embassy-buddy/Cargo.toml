@@ -1,0 +1,54 @@
+[package]
+name = "embassy-buddy"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+authors = ["James Gopsill"]
+description = "A board support crate for the Prusa Buddy Board."
+repository = "https://github.com/jamesgopsill/embassy-buddy"
+readme = "README.md"
+keywords = ["MEX", "FDM"]
+documentation = "https://docs.rs/embassy-buddy"
+categories = ["no-std", "embedded"]
+exclude = ["/tmp", "/.zed", "/examples"]
+
+[lib]
+
+[dependencies]
+cortex-m-rt = "0.7.5"
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+defmt = "0.3.10"
+defmt-rtt = "0.4.1"
+embassy-stm32 = { version = "0.2.0", features = [
+    "defmt",
+    "stm32f407vg",
+    "memory-x",
+    "time-driver-tim4",
+    "exti",
+] }
+embassy-executor = { version = "0.7.0", features = [
+    "task-arena-size-4096",
+    "arch-cortex-m",
+    "executor-thread",
+    "defmt",
+] }
+embassy-time = { version = "0.4.0", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+    # Currently limited by 16-bit timer implementation
+    # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
+    "tick-hz-32_768", # Recommended
+    #"tick-hz-80_000",
+] }
+embassy-sync = { version = "0.6.2", features = ["defmt"] }
+embassy-futures = "0.1.1"
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+embedded-io-async = "0.6.1"
+panic-probe = { version = "0.3.2", features = ["print-defmt"] }
+libm = "0.2.11"
+packed_struct = { version = "0.10.1", default-features = false }
+embassy-tmc = { path = "../embassy-tmc" }

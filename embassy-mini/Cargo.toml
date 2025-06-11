@@ -1,0 +1,28 @@
+[package]
+name = "embassy-mini"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m-rt = "0.7.5"
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+defmt = "0.3.10"
+defmt-rtt = "0.4.1"
+embassy-stm32 = { version = "0.2.0", features = [
+    "defmt",
+    "stm32f407vg",
+    "memory-x",
+    "time-driver-tim4",
+    "exti",
+] }
+embassy-executor = { version = "0.7.0", features = [
+    "task-arena-size-4096",
+    "arch-cortex-m",
+    "executor-thread",
+    "defmt",
+] }
+embassy-buddy = { path = "../embassy-buddy" }
+panic-probe = { version = "0.3.2", features = ["print-defmt"] }
