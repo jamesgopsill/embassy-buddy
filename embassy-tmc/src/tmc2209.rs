@@ -56,16 +56,34 @@ impl<
         en.set_low().unwrap();
     }
 
+    pub async fn try_enable(&self) -> Result<(), TryLockError> {
+        let mut en = self.en.try_lock()?;
+        en.set_low().unwrap();
+        Ok(())
+    }
+
     /// Disables (power stage off) the stepper motor by setting Pin 2 high ([TMC2209 Datasheet Page 9][https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.09.pdf]).
     pub async fn disable(&self) {
         let mut en = self.en.lock().await;
         en.set_high().unwrap();
     }
 
+    pub async fn try_disable(&self) -> Result<(), TryLockError> {
+        let mut en = self.en.try_lock()?;
+        en.set_high().unwrap();
+        Ok(())
+    }
+
     /// Toggles the step pin (Pin 16) to initiate a step.
     pub async fn step(&self) {
         let mut step = self.step.lock().await;
         step.toggle().unwrap();
+    }
+
+    pub async fn try_step(&self) -> Result<(), TryLockError> {
+        let mut step = self.step.try_lock()?;
+        step.toggle().unwrap();
+        Ok(())
     }
 
     /// Sets the direction of the motor spindle by driving Pin 19 high or low.
@@ -80,8 +98,20 @@ impl<
         }
     }
 
+    pub async fn try_set_direction(
+        &self,
+        dir: Direction,
+    ) -> Result<(), TryLockError> {
+        let mut d = self.dir.try_lock()?;
+        match dir {
+            Direction::Clockwise => d.set_high().unwrap(),
+            Direction::CounterClockwise => d.set_low().unwrap(),
+        }
+        Ok(())
+    }
+
     /// Returns the current direction setting of the motor.
-    pub async fn get_direction(&mut self) -> Direction {
+    pub async fn get_direction(&self) -> Direction {
         let mut dir = self.dir.lock().await;
         match dir.is_set_high().unwrap() {
             true => Direction::Clockwise,
@@ -89,10 +119,12 @@ impl<
         }
     }
 
-    /// Report if the stepper motor has errored immediately retruning if the lock cannot be attained.
-    pub async fn try_has_errored(&self) -> Result<bool, TryLockError> {
-        let mut dia = self.dia.try_lock()?;
-        Ok(dia.is_high().unwrap())
+    pub async fn try_get_direction(&self) -> Result<Direction, TryLockError> {
+        let mut dir = self.dir.try_lock()?;
+        match dir.is_set_high().unwrap() {
+            true => Ok(Direction::Clockwise),
+            false => Ok(Direction::CounterClockwise),
+        }
     }
 
     /// Report is the stepper motor has errored waiting for the lock to be attained.
@@ -101,8 +133,18 @@ impl<
         dia.is_high().unwrap()
     }
 
+    pub async fn try_has_errored(&self) -> Result<bool, TryLockError> {
+        let mut dia = self.dia.try_lock()?;
+        Ok(dia.is_high().unwrap())
+    }
+
     /// This function will try and hold the lock for the dia pin immediately erroring if unable to attain it. Use with a embassy-futures select statement and another future that will exit on the successful completion of an event that is using the motor. If that select finishes then this future will drop relinquishing the lock.
-    pub async fn on_error(&self) -> Result<(), TryLockError> {
+    pub async fn on_error(&self) {
+        let mut dia = self.dia.lock().await;
+        dia.wait_for_high().await.unwrap();
+    }
+
+    pub async fn try_on_error(&self) -> Result<(), TryLockError> {
         let mut dia = self.dia.try_lock()?;
         dia.wait_for_high().await.unwrap();
         Ok(())
@@ -125,58 +167,122 @@ pub struct TMC2209AsyncUart<
     // Output Pin
     O: OutputPin<Error = Infallible> + StatefulOutputPin<Error = Infallible>,
     // Input Interruptable Pin
-    I, // InputPin<Error = Infallible>| Wait<Error = Infallible>,
+    I,
     // RawMutex
     R: RawMutex,
     // Uart
     U: Read + Write,
 > {
-    en: O,
-    step: O,
-    dir: O,
-    dia: I,
+    en: Mutex<R, O>,
+    step: Mutex<R, O>,
+    dir: Mutex<R, O>,
+    dia: Mutex<R, I>,
     addr: u8,
     usart: &'a Mutex<R, U>,
 }
 
 impl<
+    'a,
     O: OutputPin<Error = Infallible> + StatefulOutputPin<Error = Infallible>,
     I,
     R: RawMutex,
     U: Read + Write,
-> TMC2209AsyncUart<'_, O, I, R, U>
+> TMC2209AsyncUart<'a, O, I, R, U>
 {
-    /// Enables (powers stage on) the stepper motor by setting Pin 2 low ([TMC2209 Datasheet Page 9][https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.09.pdf]).
-    pub fn enable(&mut self) {
-        self.en.set_low().unwrap();
+    pub fn new(
+        en: O,
+        step: O,
+        dir: O,
+        dia: I,
+        addr: u8,
+        usart: &'a Mutex<R, U>,
+    ) -> Result<Self, TMCError> {
+        if addr > 3 {
+            return Err(TMCError::InvalidMotorAddress(addr));
+        }
+        Ok(Self {
+            en: Mutex::new(en),
+            step: Mutex::new(step),
+            dir: Mutex::new(dir),
+            dia: Mutex::new(dia),
+            addr,
+            usart,
+        })
     }
 
+    /// Enables (powers stage on) the stepper motor by setting Pin 2 low ([TMC2209 Datasheet Page 9][https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.09.pdf]).
+    pub async fn enable(&self) {
+        let mut en = self.en.lock().await;
+        en.set_low().unwrap();
+    }
+
+    pub async fn try_enable(&self) -> Result<(), TryLockError> {
+        let mut en = self.en.try_lock()?;
+        en.set_low().unwrap();
+        Ok(())
+    }
     /// Disables (power stage off) the stepper motor by setting Pin 2 high ([TMC2209 Datasheet Page 9][https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.09.pdf]).
-    pub fn disable(&mut self) {
-        self.en.set_high().unwrap();
+    pub async fn disable(&self) {
+        let mut en = self.en.lock().await;
+        en.set_high().unwrap();
+    }
+
+    pub async fn try_disable(&self) -> Result<(), TryLockError> {
+        let mut en = self.en.try_lock()?;
+        en.set_high().unwrap();
+        Ok(())
     }
 
     /// Toggles the step pin (Pin 16) to initiate a step.
-    pub fn step(&mut self) {
-        self.step.toggle().unwrap();
+    pub async fn step(&self) {
+        let mut step = self.step.lock().await;
+        step.toggle().unwrap();
+    }
+
+    pub async fn try_step(&self) -> Result<(), TryLockError> {
+        let mut step = self.step.try_lock()?;
+        step.toggle().unwrap();
+        Ok(())
     }
 
     /// Sets the direction of the motor spindle by driving Pin 19 high or low.
-    pub fn set_direction(
-        &mut self,
+    pub async fn set_direction(
+        &self,
         dir: Direction,
     ) {
+        let mut d = self.dir.lock().await;
         match dir {
-            Direction::Clockwise => self.dir.set_high().unwrap(),
-            Direction::CounterClockwise => self.dir.set_low().unwrap(),
+            Direction::Clockwise => d.set_high().unwrap(),
+            Direction::CounterClockwise => d.set_low().unwrap(),
         }
     }
 
+    pub async fn try_set_direction(
+        &self,
+        dir: Direction,
+    ) -> Result<(), TryLockError> {
+        let mut d = self.dir.try_lock()?;
+        match dir {
+            Direction::Clockwise => d.set_high().unwrap(),
+            Direction::CounterClockwise => d.set_low().unwrap(),
+        }
+        Ok(())
+    }
+
     /// Returns the current direction setting of the motor.
-    pub fn get_direction(&mut self) -> Direction {
-        match self.dir.is_set_high().unwrap() {
+    pub async fn get_direction(&self) -> Direction {
+        let mut dir = self.dir.lock().await;
+        match dir.is_set_high().unwrap() {
             true => Direction::Clockwise,
             false => Direction::CounterClockwise,
+        }
+    }
+
+    pub async fn try_get_direction(&self) -> Result<Direction, TryLockError> {
+        let mut dir = self.dir.try_lock()?;
+        match dir.is_set_high().unwrap() {
+            true => Ok(Direction::Clockwise),
+            false => Ok(Direction::CounterClockwise),
         }
     }
 }
@@ -189,31 +295,15 @@ impl<
     U: Read + Write,
 > TMC2209AsyncUart<'a, O, I, R, U>
 {
-    /// Create new instance of TMC2209AsyncUart.
-    pub fn new_with_input(
-        en: O,
-        step: O,
-        dir: O,
-        dia: I,
-        addr: u8,
-        usart: &'a Mutex<R, U>,
-    ) -> Result<Self, TMCError> {
-        if addr > 3 {
-            return Err(TMCError::InvalidMotorAddress(addr));
-        }
-        Ok(Self {
-            en,
-            step,
-            dir,
-            dia,
-            addr,
-            usart,
-        })
+    /// Check the diagnostic pin (Pin 11) to see if an error has occurred.
+    pub async fn has_errored(&self) -> bool {
+        let mut dia = self.dia.lock().await;
+        dia.is_high().unwrap()
     }
 
-    /// Check the diagnostic pin (Pin 11) to see if an error has occurred.
-    pub fn has_errored(&mut self) -> bool {
-        self.dia.is_high().unwrap()
+    pub async fn try_has_errored(&self) -> Result<bool, TryLockError> {
+        let mut dia = self.dia.try_lock()?;
+        Ok(dia.is_high().unwrap())
     }
 }
 
@@ -225,30 +315,16 @@ impl<
     U: Read + Write,
 > TMC2209AsyncUart<'a, O, I, R, U>
 {
-    pub fn new_with_interrupt(
-        en: O,
-        step: O,
-        dir: O,
-        dia: I,
-        addr: u8,
-        usart: &'a Mutex<R, U>,
-    ) -> Result<Self, TMCError> {
-        if addr > 3 {
-            return Err(TMCError::InvalidMotorAddress(addr));
-        }
-        Ok(Self {
-            en,
-            step,
-            dir,
-            dia,
-            addr,
-            usart,
-        })
+    /// This function will try and hold the lock for the dia pin immediately erroring if unable to attain it. Use with a embassy-futures select statement and another future that will exit on the successful completion of an event that is using the motor. If that select finishes then this future will drop relinquishing the lock.
+    pub async fn on_error(&self) {
+        let mut dia = self.dia.lock().await;
+        dia.wait_for_high().await.unwrap();
     }
 
-    /// An async interrupt waiting if the diagnostic pin goes high.
-    pub async fn wait_for_error(&mut self) {
-        self.dia.wait_for_high().await.unwrap()
+    pub async fn try_on_error(&self) -> Result<(), TryLockError> {
+        let mut dia = self.dia.try_lock()?;
+        dia.wait_for_high().await.unwrap();
+        Ok(())
     }
 }
 
@@ -263,7 +339,7 @@ impl<
     /// that you wish to populate with the actual settings from the
     /// driver.
     pub async fn read_register(
-        &mut self,
+        &self,
         register: &mut impl Datagram,
     ) -> Result<(), TMCError> {
         // Generate the read request from the register
@@ -308,7 +384,7 @@ impl<
     /// Write to a register on the driver with some updated
     /// config params.
     pub async fn write_register(
-        &mut self,
+        &self,
         register: &mut impl Datagram,
     ) -> Result<(), TMCError> {
         // Check what the request count is.
@@ -342,73 +418,73 @@ impl<
         }
     }
 
-    pub async fn read_ifcnt(&mut self) -> Result<IfCnt, TMCError> {
+    pub async fn read_ifcnt(&self) -> Result<IfCnt, TMCError> {
         let mut reg = IfCnt::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_ioin(&mut self) -> Result<Ioin, TMCError> {
+    pub async fn read_ioin(&self) -> Result<Ioin, TMCError> {
         let mut reg = Ioin::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_gconf(&mut self) -> Result<Gconf, TMCError> {
+    pub async fn read_gconf(&self) -> Result<Gconf, TMCError> {
         let mut reg = Gconf::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_gstat(&mut self) -> Result<GStat, TMCError> {
+    pub async fn read_gstat(&self) -> Result<GStat, TMCError> {
         let mut reg = GStat::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_nodeconf(&mut self) -> Result<NodeConf, TMCError> {
+    pub async fn read_nodeconf(&self) -> Result<NodeConf, TMCError> {
         let mut reg = NodeConf::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_iholdirun(&mut self) -> Result<IHoldIRun, TMCError> {
+    pub async fn read_iholdirun(&self) -> Result<IHoldIRun, TMCError> {
         let mut reg = IHoldIRun::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_tpowerdown(&mut self) -> Result<TPowerDown, TMCError> {
+    pub async fn read_tpowerdown(&self) -> Result<TPowerDown, TMCError> {
         let mut reg = TPowerDown::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_tstep(&mut self) -> Result<TStep, TMCError> {
+    pub async fn read_tstep(&self) -> Result<TStep, TMCError> {
         let mut reg = TStep::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_tpwmthrs(&mut self) -> Result<TpwmThrs, TMCError> {
+    pub async fn read_tpwmthrs(&self) -> Result<TpwmThrs, TMCError> {
         let mut reg = TpwmThrs::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_vactual(&mut self) -> Result<VActual, TMCError> {
+    pub async fn read_vactual(&self) -> Result<VActual, TMCError> {
         let mut reg = VActual::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_chopconf(&mut self) -> Result<ChopConf, TMCError> {
+    pub async fn read_chopconf(&self) -> Result<ChopConf, TMCError> {
         let mut reg = ChopConf::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
     }
 
-    pub async fn read_pwmconf(&mut self) -> Result<PwmConf, TMCError> {
+    pub async fn read_pwmconf(&self) -> Result<PwmConf, TMCError> {
         let mut reg = PwmConf::default();
         self.read_register(&mut reg).await?;
         Ok(reg)
