@@ -20,15 +20,15 @@ async fn main(_spawner: Spawner) {
 async fn buzz(buzzer: &BuddyBuzzer<'_>) {
     let mut n = 0;
     loop {
-        info!("Buzz");
-        buzzer.try_set_duty_cycle_fraction(1, 2).await.unwrap();
+        info!("[BUZZER] buzz");
+        buzzer.try_set_duty_cycle_fraction(1, 2).unwrap();
         Timer::after_millis(100).await;
-        buzzer.try_set_duty_cycle_fully_off().await.unwrap();
+        buzzer.try_set_duty_cycle_fully_off().unwrap();
         Timer::after_secs(1).await;
         n += 1;
         if n > 5 {
             break;
         }
     }
-    info!("Buzz Finished");
+    info!("[BUZZER] finished");
 }

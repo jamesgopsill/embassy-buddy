@@ -3,6 +3,9 @@ name = "embassy-mini"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+debug = 2
+
 [dependencies]
 cortex-m-rt = "0.7.5"
 cortex-m = { version = "0.7.7", features = [
@@ -24,5 +27,16 @@ embassy-executor = { version = "0.7.0", features = [
     "executor-thread",
     "defmt",
 ] }
-embassy-buddy = { path = "../embassy-buddy" }
+embassy-futures = "0.1.1"
+embassy-time = { version = "0.4.0", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+    # Currently limited by 16-bit timer implementation
+    # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
+    # Runs well in release mode.
+    "tick-hz-32_768", # Recommended
+    #"tick-hz-80_000",
+] }
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
+embassy-buddy = { path = "../embassy-buddy" }
+#picoserve = { version = "0.16.0", features = ["embassy"] }

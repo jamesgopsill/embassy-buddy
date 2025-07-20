@@ -1,7 +1,11 @@
 use core::convert::Infallible;
 
 use defmt::Format;
-use embassy_stm32::exti::ExtiInput;
+use embassy_stm32::{
+    exti::ExtiInput,
+    gpio::Pull,
+    peripherals::{EXTI8, PA8},
+};
 use embassy_sync::{
     blocking_mutex::raw::{RawMutex, ThreadModeRawMutex},
     mutex::{Mutex, TryLockError},
@@ -10,6 +14,11 @@ use embedded_hal::digital::InputPin;
 use embedded_hal_async::digital::Wait;
 
 pub type BuddyPinda<'a> = Pinda<ThreadModeRawMutex, ExtiInput<'a>>;
+
+pub(crate) fn init_pinda<'a>(pin: PA8, ch: EXTI8) -> BuddyPinda<'a> {
+    let exti = ExtiInput::new(pin, ch, Pull::None);
+    Pinda::new(exti)
+}
 
 #[derive(Debug, Format)]
 pub enum PindaStateChange {
@@ -31,6 +40,11 @@ impl<M: RawMutex, T: InputPin<Error = Infallible> + Wait<Error = Infallible>> Pi
     pub async fn in_contact(&self) -> bool {
         let mut exti = self.exti.lock().await;
         exti.is_high().unwrap()
+    }
+
+    pub fn try_in_contact(&self) -> Result<bool, TryLockError> {
+        let mut exti = self.exti.try_lock()?;
+        Ok(exti.is_high().unwrap())
     }
 
     pub async fn try_wait_for_contact(self) -> Result<(), TryLockError> {

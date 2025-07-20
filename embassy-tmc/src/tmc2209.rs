@@ -1,4 +1,4 @@
-use core::convert::Infallible;
+use core::{convert::Infallible, ops::DerefMut};
 
 use embassy_sync::{
     blocking_mutex::raw::RawMutex,
@@ -36,12 +36,7 @@ impl<
 > TMC2209Minimal<O, I, R>
 {
     /// Create a new instance of the TMC2209Minimal driver.
-    pub fn new(
-        en: O,
-        step: O,
-        dir: O,
-        dia: I,
-    ) -> Self {
+    pub fn new(en: O, step: O, dir: O, dia: I) -> Self {
         Self {
             en: Mutex::new(en),
             step: Mutex::new(step),
@@ -56,7 +51,7 @@ impl<
         en.set_low().unwrap();
     }
 
-    pub async fn try_enable(&self) -> Result<(), TryLockError> {
+    pub fn try_enable(&self) -> Result<(), TryLockError> {
         let mut en = self.en.try_lock()?;
         en.set_low().unwrap();
         Ok(())
@@ -68,7 +63,7 @@ impl<
         en.set_high().unwrap();
     }
 
-    pub async fn try_disable(&self) -> Result<(), TryLockError> {
+    pub fn try_disable(&self) -> Result<(), TryLockError> {
         let mut en = self.en.try_lock()?;
         en.set_high().unwrap();
         Ok(())
@@ -80,17 +75,14 @@ impl<
         step.toggle().unwrap();
     }
 
-    pub async fn try_step(&self) -> Result<(), TryLockError> {
+    pub fn try_step(&self) -> Result<(), TryLockError> {
         let mut step = self.step.try_lock()?;
         step.toggle().unwrap();
         Ok(())
     }
 
     /// Sets the direction of the motor spindle by driving Pin 19 high or low.
-    pub async fn set_direction(
-        &self,
-        dir: Direction,
-    ) {
+    pub async fn set_direction(&self, dir: Direction) {
         let mut d = self.dir.lock().await;
         match dir {
             Direction::Clockwise => d.set_high().unwrap(),
@@ -98,10 +90,7 @@ impl<
         }
     }
 
-    pub async fn try_set_direction(
-        &self,
-        dir: Direction,
-    ) -> Result<(), TryLockError> {
+    pub fn try_set_direction(&self, dir: Direction) -> Result<(), TryLockError> {
         let mut d = self.dir.try_lock()?;
         match dir {
             Direction::Clockwise => d.set_high().unwrap(),
@@ -119,7 +108,7 @@ impl<
         }
     }
 
-    pub async fn try_get_direction(&self) -> Result<Direction, TryLockError> {
+    pub fn try_get_direction(&self) -> Result<Direction, TryLockError> {
         let mut dir = self.dir.try_lock()?;
         match dir.is_set_high().unwrap() {
             true => Ok(Direction::Clockwise),
@@ -133,7 +122,7 @@ impl<
         dia.is_high().unwrap()
     }
 
-    pub async fn try_has_errored(&self) -> Result<bool, TryLockError> {
+    pub fn try_has_errored(&self) -> Result<bool, TryLockError> {
         let mut dia = self.dia.try_lock()?;
         Ok(dia.is_high().unwrap())
     }
@@ -160,7 +149,7 @@ impl<
 /// 3D printer axes and extruder.
 ///
 /// During testing, I had to use the stm32 BufferedUart instance set into
-/// `HalfDuplexReadback::Readback` mode so the `read_register` function expects
+/// `HalfDuplexReadback::Readback` mode so the `read_reg_addr` function expects
 /// this to be set.
 pub struct TMC2209AsyncUart<
     'a,
@@ -189,6 +178,7 @@ impl<
     U: Read + Write,
 > TMC2209AsyncUart<'a, O, I, R, U>
 {
+    /// Create a new instance of the TMC2209 with async uart connectivity.
     pub fn new(
         en: O,
         step: O,
@@ -216,7 +206,7 @@ impl<
         en.set_low().unwrap();
     }
 
-    pub async fn try_enable(&self) -> Result<(), TryLockError> {
+    pub fn try_enable(&self) -> Result<(), TryLockError> {
         let mut en = self.en.try_lock()?;
         en.set_low().unwrap();
         Ok(())
@@ -227,7 +217,7 @@ impl<
         en.set_high().unwrap();
     }
 
-    pub async fn try_disable(&self) -> Result<(), TryLockError> {
+    pub fn try_disable(&self) -> Result<(), TryLockError> {
         let mut en = self.en.try_lock()?;
         en.set_high().unwrap();
         Ok(())
@@ -239,17 +229,14 @@ impl<
         step.toggle().unwrap();
     }
 
-    pub async fn try_step(&self) -> Result<(), TryLockError> {
+    pub fn try_step(&self) -> Result<(), TryLockError> {
         let mut step = self.step.try_lock()?;
         step.toggle().unwrap();
         Ok(())
     }
 
     /// Sets the direction of the motor spindle by driving Pin 19 high or low.
-    pub async fn set_direction(
-        &self,
-        dir: Direction,
-    ) {
+    pub async fn set_direction(&self, dir: Direction) {
         let mut d = self.dir.lock().await;
         match dir {
             Direction::Clockwise => d.set_high().unwrap(),
@@ -257,10 +244,7 @@ impl<
         }
     }
 
-    pub async fn try_set_direction(
-        &self,
-        dir: Direction,
-    ) -> Result<(), TryLockError> {
+    pub fn try_set_direction(&self, dir: Direction) -> Result<(), TryLockError> {
         let mut d = self.dir.try_lock()?;
         match dir {
             Direction::Clockwise => d.set_high().unwrap(),
@@ -278,7 +262,7 @@ impl<
         }
     }
 
-    pub async fn try_get_direction(&self) -> Result<Direction, TryLockError> {
+    pub fn try_get_direction(&self) -> Result<Direction, TryLockError> {
         let mut dir = self.dir.try_lock()?;
         match dir.is_set_high().unwrap() {
             true => Ok(Direction::Clockwise),
@@ -301,7 +285,7 @@ impl<
         dia.is_high().unwrap()
     }
 
-    pub async fn try_has_errored(&self) -> Result<bool, TryLockError> {
+    pub fn try_has_errored(&self) -> Result<bool, TryLockError> {
         let mut dia = self.dia.try_lock()?;
         Ok(dia.is_high().unwrap())
     }
@@ -335,159 +319,69 @@ impl<
     U: Read + Write,
 > TMC2209AsyncUart<'_, O, I, R, U>
 {
-    /// Reads a register from the driver. Pass an instance of the register
-    /// that you wish to populate with the actual settings from the
-    /// driver.
-    pub async fn read_register(
-        &self,
-        register: &mut impl Datagram,
-    ) -> Result<(), TMCError> {
-        // Generate the read request from the register
-        // that implements the Datagram trait.
-        let datagram = register.read_request(self.addr)?;
-        info!("Sending: {}", datagram);
-
-        info!("Locking usart");
-        // Get exclusive access to the uart.
+    pub async fn write(&self, register: &mut impl Datagram) -> Result<(), TMCError> {
         let mut usart = self.usart.lock().await;
-
-        info!("Writing data");
-        if usart.write(datagram.as_slice()).await.is_err() {
-            return Err(TMCError::UsartError);
-        }
-
-        info!("Write Complete");
-        let mut msg = [0u8; 16];
-        // Expects the uart to be set into readback mode so it will
-        // return both the request and response. Thus, we need to
-        // know the length of what we sent so we can pull out the response
-        // from the array.
-        let start = datagram.len();
-        let end: usize = match start {
-            4 => 12, // Read Requests
-            8 => 16, // Write Requests
-            // Should not occur as we should have generated a
-            // valid datagram from the impl.
-            _ => return Err(TMCError::DatagramLength(start)),
-        };
-
-        // Async read bytes as they are returned.
-        usart.read_exact(&mut msg[..end]).await.unwrap();
-        info!("Bytes Received: {}", msg[..end]);
-
-        info!("Updating Register");
-        register.update(&msg[start..end])?;
-
-        Ok(())
-    }
-
-    /// Write to a register on the driver with some updated
-    /// config params.
-    pub async fn write_register(
-        &self,
-        register: &mut impl Datagram,
-    ) -> Result<(), TMCError> {
-        // Check what the request count is.
-        let ifcnt_before = self.read_ifcnt().await?;
-
-        // Create the datagram
-        let datagram = register.write_request(self.addr)?;
-
-        // Perform the write and make sure release the lock
-        // here so we can access the uart again when we
-        // want to read the new ifcnt.
-        {
-            let mut uart = self.usart.lock().await;
-            if uart.write(datagram.as_slice()).await.is_err() {
-                return Err(TMCError::UsartError);
-            }
-        }
-
-        let ifcnt_after = self.read_ifcnt().await?;
-
-        // The ifcnt wraps if it goes over `u8::MAX` so we need to
-        // check if it is either greater than the previous value
-        // and if the previous value is `u8::MAX` then check if the
-        // count has wrapped.
-        if ifcnt_after.cnt > ifcnt_before.cnt
-            || (ifcnt_before.cnt == u8::MAX && ifcnt_after.cnt == 0)
-        {
-            Ok(())
-        } else {
-            Err(TMCError::UsartError)
-        }
+        register.write(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_ifcnt(&self) -> Result<IfCnt, TMCError> {
-        let mut reg = IfCnt::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        IfCnt::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_ioin(&self) -> Result<Ioin, TMCError> {
-        let mut reg = Ioin::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        Ioin::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_gconf(&self) -> Result<Gconf, TMCError> {
-        let mut reg = Gconf::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        Gconf::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_gstat(&self) -> Result<GStat, TMCError> {
-        let mut reg = GStat::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        GStat::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_nodeconf(&self) -> Result<NodeConf, TMCError> {
-        let mut reg = NodeConf::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        NodeConf::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_iholdirun(&self) -> Result<IHoldIRun, TMCError> {
-        let mut reg = IHoldIRun::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        IHoldIRun::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_tpowerdown(&self) -> Result<TPowerDown, TMCError> {
-        let mut reg = TPowerDown::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        TPowerDown::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_tstep(&self) -> Result<TStep, TMCError> {
-        let mut reg = TStep::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        TStep::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_tpwmthrs(&self) -> Result<TpwmThrs, TMCError> {
-        let mut reg = TpwmThrs::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        TpwmThrs::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_vactual(&self) -> Result<VActual, TMCError> {
-        let mut reg = VActual::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        VActual::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_chopconf(&self) -> Result<ChopConf, TMCError> {
-        let mut reg = ChopConf::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        ChopConf::read(usart.deref_mut(), self.addr).await
     }
 
     pub async fn read_pwmconf(&self) -> Result<PwmConf, TMCError> {
-        let mut reg = PwmConf::default();
-        self.read_register(&mut reg).await?;
-        Ok(reg)
+        let mut usart = self.usart.lock().await;
+        PwmConf::read(usart.deref_mut(), self.addr).await
     }
 }
 
@@ -499,7 +393,7 @@ pub struct IfCnt {
 }
 
 impl Datagram for IfCnt {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x02
     }
 }
@@ -535,7 +429,7 @@ pub struct Ioin {
 }
 
 impl Datagram for Ioin {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x06
     }
 }
@@ -566,7 +460,7 @@ pub struct Gconf {
 }
 
 impl Datagram for Gconf {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x00
     }
 }
@@ -583,7 +477,7 @@ pub struct GStat {
 }
 
 impl Datagram for GStat {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x01
     }
 }
@@ -596,7 +490,7 @@ pub struct NodeConf {
 }
 
 impl Datagram for NodeConf {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x03
     }
 }
@@ -613,7 +507,7 @@ pub struct IHoldIRun {
 }
 
 impl Datagram for IHoldIRun {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x10
     }
 }
@@ -626,7 +520,7 @@ pub struct TPowerDown {
 }
 
 impl Datagram for TPowerDown {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x11
     }
 }
@@ -639,7 +533,7 @@ pub struct TStep {
 }
 
 impl Datagram for TStep {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x12
     }
 }
@@ -652,7 +546,7 @@ pub struct TpwmThrs {
 }
 
 impl Datagram for TpwmThrs {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x13
     }
 }
@@ -671,7 +565,7 @@ impl VActual {
 }
 
 impl Datagram for VActual {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x22
     }
 }
@@ -702,7 +596,7 @@ pub struct ChopConf {
 }
 
 impl Datagram for ChopConf {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x6C
     }
 }
@@ -731,7 +625,7 @@ pub struct PwmConf {
 }
 
 impl Datagram for PwmConf {
-    fn read_register(&self) -> u8 {
+    fn read_reg_addr() -> u8 {
         0x70
     }
 }

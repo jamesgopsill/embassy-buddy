@@ -19,7 +19,10 @@ async fn main(_spawner: Spawner) {
 
 async fn pinda_interrupt(sensor: BuddyPinda<'_>) -> ! {
     loop {
-        let change = sensor.try_on_change().await;
-        info!("Pinda: {}", change);
+        if let Ok(change) = sensor.try_on_change().await {
+            info!("[PINDA] {}", change);
+        } else {
+            info!("[PINDA] Error");
+        }
     }
 }

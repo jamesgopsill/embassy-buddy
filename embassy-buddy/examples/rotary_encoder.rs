@@ -19,7 +19,7 @@ async fn main(_spawner: Spawner) {
 async fn spun(rotary: BuddyRotaryEncoder<'_>) -> ! {
     info!("Initialising Click");
     loop {
-        let dir = rotary.try_spun().await;
-        info!("Spun: {}", dir);
+        let dir = rotary.try_spun().await.unwrap();
+        info!("[ROTARY]: {}", dir);
     }
 }

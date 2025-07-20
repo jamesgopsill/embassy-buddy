@@ -4,7 +4,7 @@
 use cortex_m::asm::nop;
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::fan::BuddyFan};
+use embassy_buddy::{Board, components::fans::BuddyFan};
 use embassy_executor::Spawner;
 use embassy_futures::join::join4;
 use embassy_time::Timer;
@@ -24,20 +24,17 @@ async fn main(_spawner: Spawner) {
     fut.await;
 }
 
-async fn cycle_fan(
-    fan: &BuddyFan<'_>,
-    label: &str,
-) -> ! {
+async fn cycle_fan(fan: &BuddyFan<'_>, label: &str) -> ! {
     let mut n = 0;
     loop {
         {
             info!("[{}] On", label);
-            fan.try_set_duty_cycle_fully_on().await.unwrap();
+            fan.try_set_duty_cycle_fully_on().unwrap();
         }
         Timer::after_secs(4).await;
         {
             info!("[{}] Off", label);
-            fan.try_set_duty_cycle_fully_off().await.unwrap();
+            fan.try_set_duty_cycle_fully_off().unwrap();
         }
         Timer::after_secs(4).await;
 
@@ -51,10 +48,7 @@ async fn cycle_fan(
     }
 }
 
-async fn speed_camera(
-    fan: &BuddyFan<'_>,
-    label: &str,
-) -> ! {
+async fn speed_camera(fan: &BuddyFan<'_>, label: &str) -> ! {
     loop {
         {
             if let Ok(Some(rpm)) = fan.try_rpm().await {

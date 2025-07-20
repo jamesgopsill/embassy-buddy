@@ -1,6 +1,10 @@
 use core::convert::Infallible;
 
-use embassy_stm32::exti::ExtiInput;
+use embassy_stm32::{
+    exti::ExtiInput,
+    gpio::Pull,
+    peripherals::{EXTI12, PE12},
+};
 use embassy_sync::{
     blocking_mutex::raw::{RawMutex, ThreadModeRawMutex},
     mutex::{Mutex, TryLockError},
@@ -8,6 +12,11 @@ use embassy_sync::{
 use embedded_hal_async::digital::Wait;
 
 pub type BuddyRotaryButton<'a> = RotaryButton<ThreadModeRawMutex, ExtiInput<'a>>;
+
+pub(crate) fn init_rotary_button<'a>(pin: PE12, ch: EXTI12) -> BuddyRotaryButton<'a> {
+    let exti = ExtiInput::new(pin, ch, Pull::Up);
+    RotaryButton::new(exti)
+}
 
 pub struct RotaryButton<M: RawMutex, T: Wait<Error = Infallible>> {
     exti: Mutex<M, T>,

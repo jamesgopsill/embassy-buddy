@@ -1,5 +1,5 @@
+#![allow(unused)]
 // Snippet from https://github.com/embassy-rs/embassy/blob/main/embassy-stm32/src/fmt.rs
-
 #![macro_use]
 
 #[collapse_debuginfo(yes)]

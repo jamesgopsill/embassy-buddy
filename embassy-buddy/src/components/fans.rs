@@ -1,0 +1,170 @@
+use embassy_stm32::{
+    exti::ExtiInput,
+    gpio::{OutputType, Pull},
+    peripherals::{EXTI10, EXTI14, PE9, PE10, PE11, PE14, TIM1},
+    time::khz,
+    timer::simple_pwm::{PwmPin, SimplePwm, SimplePwmChannel},
+};
+use embassy_sync::{
+    blocking_mutex::raw::{RawMutex, ThreadModeRawMutex},
+    mutex::{Mutex, TryLockError},
+};
+use embassy_time::{Duration, Instant, WithTimeout};
+use embedded_hal::pwm::SetDutyCycle;
+use embedded_hal_async::digital::Wait;
+
+pub type BuddyFan<'a> = Fan<ThreadModeRawMutex, SimplePwmChannel<'a, TIM1>, ExtiInput<'a>>;
+
+pub struct BuddyFans<'a> {
+    pub fan_0: BuddyFan<'a>,
+    pub fan_1: BuddyFan<'a>,
+}
+
+pub(crate) fn init_fans<'a>(
+    fan_0_pwm: PE11,
+    fan_0_inp: PE10,
+    fan_0_exti: EXTI10,
+    fan_1_pwm: PE9,
+    fan_1_inp: PE14,
+    fan_1_exti: EXTI14,
+    tim: TIM1,
+) -> BuddyFans<'a> {
+    let fan_0_pwm_pin = PwmPin::new_ch2(fan_0_pwm, OutputType::PushPull);
+    let fan_1_pwm_pin = PwmPin::new_ch1(fan_1_pwm, OutputType::PushPull);
+    let pwm = SimplePwm::new(
+        tim,
+        Some(fan_1_pwm_pin),
+        Some(fan_0_pwm_pin),
+        None,
+        None,
+        khz(21),
+        Default::default(),
+    );
+    let fan_0_exti = ExtiInput::new(fan_0_inp, fan_0_exti, Pull::Down);
+    let fan_1_exti = ExtiInput::new(fan_1_inp, fan_1_exti, Pull::Down);
+    let mut channels = pwm.split();
+    channels.ch1.enable();
+    channels.ch2.enable();
+    let fan_0 = Fan::new(channels.ch2, fan_0_exti);
+    let fan_1 = Fan::new(channels.ch1, fan_1_exti);
+    BuddyFans { fan_0, fan_1 }
+}
+
+pub struct Fan<M: RawMutex, T1, T2> {
+    ch: Mutex<M, T1>,
+    exti: Mutex<M, T2>,
+}
+
+impl<M: RawMutex, T1, T2> Fan<M, T1, T2> {
+    pub fn new(ch: T1, exti: T2) -> Self {
+        Self {
+            ch: Mutex::new(ch),
+            exti: Mutex::new(exti),
+        }
+    }
+}
+
+impl<M: RawMutex, T1: SetDutyCycle, T2> Fan<M, T1, T2> {
+    pub fn try_set_duty_cycle_fully_off(&self) -> Result<(), TryLockError> {
+        let mut ch = self.ch.try_lock()?;
+        ch.set_duty_cycle_fully_off().unwrap();
+        Ok(())
+    }
+
+    pub async fn set_duty_cycle_fully_off(&self) {
+        let mut ch = self.ch.lock().await;
+        ch.set_duty_cycle_fully_off().unwrap();
+    }
+
+    pub fn try_set_duty_cycle_fully_on(&self) -> Result<(), TryLockError> {
+        let mut ch = self.ch.try_lock()?;
+        ch.set_duty_cycle_fully_on().unwrap();
+        Ok(())
+    }
+
+    pub async fn set_duty_cycle_fully_on(&self) {
+        let mut ch = self.ch.lock().await;
+        ch.set_duty_cycle_fully_on().unwrap();
+    }
+
+    pub async fn set_duty_cycle_fraction(&self, num: u16, denom: u16) {
+        let mut ch = self.ch.lock().await;
+        ch.set_duty_cycle_fraction(num, denom).unwrap();
+    }
+
+    pub fn try_set_duty_cycle_fraction(&self, num: u16, denom: u16) -> Result<(), TryLockError> {
+        let mut ch = self.ch.try_lock()?;
+        ch.set_duty_cycle_fraction(num, denom).unwrap();
+        Ok(())
+    }
+
+    pub async fn set_duty_cycle_percent(&self, percent: u8) {
+        let mut ch = self.ch.lock().await;
+        ch.set_duty_cycle_percent(percent).unwrap();
+    }
+
+    pub fn try_set_duty_cycle_percent(&self, percent: u8) -> Result<(), TryLockError> {
+        let mut ch = self.ch.try_lock()?;
+        ch.set_duty_cycle_percent(percent).unwrap();
+        Ok(())
+    }
+}
+
+impl<M: RawMutex, T1, T2: Wait> Fan<M, T1, T2> {
+    /// Calculate the current speed of the fan.
+    pub async fn try_rpm(&self) -> Result<Option<f64>, TryLockError> {
+        let minute_in_millis: f64 = 1_000.0 * 60.0;
+        let mut exti = self.exti.try_lock()?;
+        let ok = exti
+            .wait_for_any_edge()
+            .with_timeout(Duration::from_millis(10))
+            .await
+            .is_ok();
+        if ok {
+            let tick_one = Instant::now().as_micros() as f64;
+            let ok = exti
+                .wait_for_any_edge()
+                .with_timeout(Duration::from_millis(10))
+                .await
+                .is_ok();
+            if ok {
+                let tick_two = Instant::now().as_micros() as f64;
+                let delta = tick_two - tick_one;
+                let rpm = minute_in_millis / (2.0 * delta);
+                Ok(Some(rpm))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn rpm(&self) -> Option<f64> {
+        let minute_in_millis: f64 = 1_000.0 * 60.0;
+        let mut exti = self.exti.lock().await;
+        let ok = exti
+            .wait_for_any_edge()
+            .with_timeout(Duration::from_millis(10))
+            .await
+            .is_ok();
+        if ok {
+            let tick_one = Instant::now().as_micros() as f64;
+            let ok = exti
+                .wait_for_any_edge()
+                .with_timeout(Duration::from_millis(10))
+                .await
+                .is_ok();
+            if ok {
+                let tick_two = Instant::now().as_micros() as f64;
+                let delta = tick_two - tick_one;
+                let rpm = minute_in_millis / (2.0 * delta);
+                Some(rpm)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+}

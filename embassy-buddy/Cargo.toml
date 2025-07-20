@@ -14,14 +14,11 @@ exclude = ["/tmp", "/.zed", "/examples"]
 
 [lib]
 
+[profile.release]
+debug = 2
+
 [dependencies]
-cortex-m-rt = "0.7.5"
-cortex-m = { version = "0.7.7", features = [
-    "inline-asm",
-    "critical-section-single-core",
-] }
 defmt = "0.3.10"
-defmt-rtt = "0.4.1"
 embassy-stm32 = { version = "0.2.0", features = [
     "defmt",
     "stm32f407vg",
@@ -29,26 +26,46 @@ embassy-stm32 = { version = "0.2.0", features = [
     "time-driver-tim4",
     "exti",
 ] }
-embassy-executor = { version = "0.7.0", features = [
-    "task-arena-size-4096",
-    "arch-cortex-m",
-    "executor-thread",
+embassy-sync = { version = "0.7.0" }
+embassy-futures = "0.1.1"
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+embedded-io-async = "0.6.1"
+embassy-net = { version = "0.7.0", features = [
     "defmt",
+    "tcp",
+    "dhcpv4",
+    "medium-ethernet",
 ] }
 embassy-time = { version = "0.4.0", features = [
     "defmt",
     "defmt-timestamp-uptime",
     # Currently limited by 16-bit timer implementation
     # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
+    # Runs well in release mode.
     "tick-hz-32_768", # Recommended
     #"tick-hz-80_000",
 ] }
-embassy-sync = { version = "0.6.2", features = ["defmt"] }
-embassy-futures = "0.1.1"
-embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-embedded-io-async = "0.6.1"
-panic-probe = { version = "0.3.2", features = ["print-defmt"] }
+embassy-tmc = { path = "../embassy-tmc" }
 libm = "0.2.11"
 packed_struct = { version = "0.10.1", default-features = false }
-embassy-tmc = { path = "../embassy-tmc" }
+thiserror = { version = "2.0.12", default-features = false }
+embassy-executor = { version = "0.7.0", features = [
+    "task-arena-size-32768",
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+    "defmt",
+] }
+static_cell = { version = "2.1.0" }
+
+[dev-dependencies]
+cortex-m-rt = "0.7.5"
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+defmt-rtt = "0.4.1"
+panic-probe = { version = "0.3.2", features = ["print-defmt"] }
+
+picoserve = { version = "0.16.0", features = ["embassy"] }
