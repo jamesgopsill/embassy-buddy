@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
-#![allow(static_mut_refs)]
+#![allow(static_mut_refs, clippy::too_many_arguments)]
 
 use embassy_executor::Spawner;
 use embassy_net::Stack;
@@ -12,9 +12,11 @@ use crate::components::{
     adc::{self, ADC_SAMPLE_MAX, BUDDY_ADC1},
     bed_power_monitor::{BedPowerMonitor, BuddyPowerMonitor},
     buzzer::{self, BuddyBuzzer},
+    eeprom::{self, BuddyEeprom},
     ethernet::init_ethernet,
     fans::{self, BuddyFans},
     filament_sensor::{self, BuddyFilamentSensor},
+    flash::{self, BuddyFlash},
     heaters::{self, BuddyHeaters},
     pinda::{self, BuddyPinda},
     rotary_button::{self, BuddyRotaryButton},
@@ -49,6 +51,8 @@ pub struct Board<'a> {
     pub steppers: BuddySteppers<'a>,
     pub peripherals: BuddyPeripherals,
     pub stack: Stack<'a>,
+    pub eeprom: BuddyEeprom<'a>,
+    pub flash: BuddyFlash<'a>,
 }
 
 /// The peripherals that are not used by default but are, for example, available through expansion headers on the board.
@@ -86,8 +90,9 @@ pub struct Conn01x10 {
     pub pb5: PB5,
     pub pb6: PB6,
     pub pb7: PB7,
-    pub pb8: PB8,
-    pub pb9: PB9,
+    // TODO: I2C pass-through.
+    //pub pb8: PB8,
+    //pub pb9: PB9,
 }
 
 impl<'a> Board<'a> {
@@ -169,6 +174,11 @@ impl<'a> Board<'a> {
             e: e_stepper,
         };
 
+        let eeprom = Self::init_eeprom(p.I2C1, p.PB8, p.PB9, p.DMA1_CH6, p.DMA1_CH0);
+        let flash = Self::init_flash(
+            p.SPI3, p.PC10, p.PC12, p.PC11, p.DMA1_CH5, p.DMA1_CH2, p.PD7,
+        );
+
         let j10 = J10 {
             pe6: p.PE6,
             pc6: p.PC6,
@@ -181,8 +191,8 @@ impl<'a> Board<'a> {
             pb5: p.PB5,
             pb6: p.PB6,
             pb7: p.PB7,
-            pb8: p.PB8,
-            pb9: p.PB9,
+            //pb8: p.PB8,
+            //pb9: p.PB9,
         };
 
         let peripherals = BuddyPeripherals {
@@ -216,6 +226,8 @@ impl<'a> Board<'a> {
             steppers,
             peripherals,
             stack,
+            eeprom,
+            flash,
         }
     }
 
@@ -420,5 +432,27 @@ impl<'a> Board<'a> {
         dia_pin: PA15,
     ) -> Result<BuddyStepperInputDia<'a>, BoardError> {
         steppers::init_e_stepper(en, step, dir, dia_pin).await
+    }
+
+    pub fn init_eeprom(
+        peri: I2C1,
+        scl: PB8,
+        sda: PB9,
+        tx_dma: DMA1_CH6,
+        rx_dma: DMA1_CH0,
+    ) -> BuddyEeprom<'a> {
+        eeprom::init_eeprom(peri, scl, sda, tx_dma, rx_dma)
+    }
+
+    pub fn init_flash(
+        peri: SPI3,
+        sck: PC10,
+        mosi: PC12,
+        miso: PC11,
+        tx_dma: DMA1_CH5,
+        rx_dma: DMA1_CH2,
+        cs: PD7,
+    ) -> BuddyFlash<'a> {
+        flash::init_flash(peri, sck, mosi, miso, tx_dma, rx_dma, cs)
     }
 }

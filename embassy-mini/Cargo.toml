@@ -22,7 +22,7 @@ embassy-stm32 = { version = "0.2.0", features = [
     "exti",
 ] }
 embassy-executor = { version = "0.7.0", features = [
-    "task-arena-size-4096",
+    "task-arena-size-32768",
     "arch-cortex-m",
     "executor-thread",
     "defmt",
@@ -39,4 +39,5 @@ embassy-time = { version = "0.4.0", features = [
 ] }
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
 embassy-buddy = { path = "../embassy-buddy" }
+embassy-printer = { path = "../embassy-printer" }
 #picoserve = { version = "0.16.0", features = ["embassy"] }

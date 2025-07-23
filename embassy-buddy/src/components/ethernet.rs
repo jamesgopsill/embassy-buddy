@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use embassy_executor::Spawner;
 use embassy_net::{Stack, StackResources};
 use embassy_stm32::{

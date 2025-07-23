@@ -1,9 +1,11 @@
 pub mod adc;
 pub mod bed_power_monitor;
 pub mod buzzer;
+pub mod eeprom;
 pub mod ethernet;
 pub mod fans;
 pub mod filament_sensor;
+pub mod flash;
 pub mod heaters;
 pub mod pinda;
 pub mod rotary_button;

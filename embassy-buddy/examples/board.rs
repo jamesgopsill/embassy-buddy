@@ -12,15 +12,16 @@ use embassy_buddy::{
     },
 };
 use embassy_executor::Spawner;
-use embassy_futures::join::join5;
+use embassy_futures::join::{join, join5};
 use embassy_time::Timer;
 use embassy_tmc::direction::Direction;
 use panic_probe as _;
 
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     info!("Booting...");
-    let board = Board::default().await;
+    let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+    let board = Board::new(&spawner, mac_addr).await;
 
     let fut_01 = pinda_interrupt(&board.pinda_sensor);
     let fut_02 = filament_interrupt(&board.filament_sensor);
@@ -31,9 +32,11 @@ async fn main(_spawner: Spawner) {
     let fut_07 = report_temp(&board.thermistors.hotend, "[HOTEND]");
     let fut_08 = back_and_forth(&board.steppers.x, "[STEPPER_X]");
     let fut_09 = back_and_forth(&board.steppers.y, "[STEPPER_Y]");
+    let fut_10 = back_and_forth(&board.steppers.z, "[STEPPER_Z]");
 
     let fut = join5(fut_01, fut_02, fut_03, fut_04, fut_05);
     let fut = join5(fut, fut_06, fut_07, fut_08, fut_09);
+    let fut = join(fut, fut_10);
     fut.await;
 }
 

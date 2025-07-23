@@ -1,79 +1,99 @@
 #![no_std]
 #![no_main]
 
-use defmt::{info, println};
+use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{
-    Board,
-    components::{
-        rotary_button::BuddyRotaryButton,
-        rotary_encoder::{BuddyRotaryEncoder, Direction},
-        steppers::{self, BuddyStepperInterruptDia},
-    },
-};
+use embassy_buddy::{Board, components::steppers::Direction};
 use embassy_executor::Spawner;
-use embassy_futures::join::join;
+
+use embassy_printer::Printer;
 use embassy_time::Timer;
 use panic_probe as _;
 
-//pub mod api;
-
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     info!("Booting...");
-    let peripherals = embassy_stm32::init(Default::default());
-    let board = Board::new(peripherals).await;
-
-    let fut_01 = click(&board.rotary_button, &board.steppers.x);
-    let fut_02 = spun(&board.rotary_encoder, &board.steppers.x);
-    let fut = join(fut_01, fut_02);
-    fut.await;
+    let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+    let board = Board::new(&spawner, mac_addr).await;
+    let _mini = Mini::new(board).await;
+    info!("Mini Loaded")
 }
 
-async fn click(btn: &BuddyRotaryButton<'_>, stepper: &BuddyStepperInterruptDia<'_>) -> ! {
-    info!("[Button] init");
-    stepper.disable().await;
-    let mut enabled = false;
-    loop {
-        btn.try_on_click().await.unwrap();
-        if enabled {
-            info!("[Button] Toggling off");
-            stepper.disable().await;
-            enabled = false;
-        } else {
-            info!("[Button] Toggling on");
-            stepper.enable().await;
-            enabled = true;
-        }
+#[derive(Debug)]
+pub enum MiniError {
+    MoveFailed,
+    HomeFailed,
+}
+
+#[derive(Debug)]
+pub enum HomeError {
+    TryLockError,
+}
+
+pub struct Mini<'a> {
+    board: Board<'a>,
+    z: f64,
+}
+
+impl<'a> Mini<'a> {
+    async fn new(board: Board<'a>) -> Self {
+        let mini = Self { board, z: 0.0 };
+        mini.home().await.unwrap();
+        mini
     }
 }
 
-async fn spun(rotary: &BuddyRotaryEncoder<'_>, stepper: &BuddyStepperInterruptDia<'_>) -> ! {
-    info!("[SPUN] Init");
-    loop {
-        let dir = rotary.try_spun().await.unwrap();
-        println!("[SPUN] {}", dir);
-        match dir {
-            Direction::Clockwise => {
-                println!("[SPUN] Moving");
-                stepper
-                    .try_set_direction(steppers::Direction::Clockwise)
-                    .unwrap();
-                for _ in 0..64 {
-                    stepper.try_step().unwrap();
-                    Timer::after_micros(100).await
-                }
+impl<'a> Printer for Mini<'a> {
+    type PrinterError = MiniError;
+    type HomeError = HomeError;
+
+    async fn relative_linear_move(
+        &self,
+        _x: f64,
+        _y: f64,
+        _z: f64,
+    ) -> Result<(), Self::PrinterError> {
+        Ok(())
+    }
+
+    async fn home(&self) -> Result<(), HomeError> {
+        self.board.steppers.z.enable().await;
+        self.board
+            .steppers
+            .z
+            .set_direction(Direction::CounterClockwise)
+            .await;
+        let microstep = 64;
+        // Step up just in case we're near the board
+        // TODO:
+        // - check we do not hit the ceiling on retraction
+        // - x home (using stall guard)
+        // - y home (using stall guard)
+        // - move retract from the home position by a certain amout
+        // - turn steps into distance (get from prusa firmware.)
+        for _ in 0..200 * microstep {
+            if self.board.steppers.z.try_step().is_err() {
+                self.board.steppers.z.disable().await;
+                return Err(HomeError::TryLockError);
+            };
+            Timer::after_micros(100).await
+        }
+        self.board
+            .steppers
+            .z
+            .set_direction(Direction::Clockwise)
+            .await;
+        loop {
+            if self.board.steppers.z.try_step().is_err() {
+                self.board.steppers.z.disable().await;
+                return Err(HomeError::TryLockError);
             }
-            Direction::CounterClockwise => {
-                println!("[SPUN] Moving");
-                stepper
-                    .try_set_direction(steppers::Direction::CounterClockwise)
-                    .unwrap();
-                for _ in 0..64 {
-                    stepper.try_step().unwrap();
-                    Timer::after_micros(100).await
-                }
+            let c = self.board.pinda_sensor.in_contact().await;
+            if c {
+                self.board.steppers.z.disable().await;
+                return Ok(());
             }
+            Timer::after_micros(200).await;
         }
     }
 }
