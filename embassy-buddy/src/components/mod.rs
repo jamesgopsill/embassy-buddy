@@ -1,6 +1,7 @@
 pub mod adc;
 pub mod bed_power_monitor;
 pub mod buzzer;
+pub mod display;
 pub mod eeprom;
 pub mod ethernet;
 pub mod fans;

@@ -12,6 +12,7 @@ use crate::components::{
     adc::{self, ADC_SAMPLE_MAX, BUDDY_ADC1},
     bed_power_monitor::{BedPowerMonitor, BuddyPowerMonitor},
     buzzer::{self, BuddyBuzzer},
+    display::{self, BuddyDisplay},
     eeprom::{self, BuddyEeprom},
     ethernet::init_ethernet,
     fans::{self, BuddyFans},
@@ -53,6 +54,7 @@ pub struct Board<'a> {
     pub stack: Stack<'a>,
     pub eeprom: BuddyEeprom<'a>,
     pub flash: BuddyFlash<'a>,
+    pub display: BuddyDisplay<'a>,
 }
 
 /// The peripherals that are not used by default but are, for example, available through expansion headers on the board.
@@ -98,6 +100,7 @@ pub struct Conn01x10 {
 impl<'a> Board<'a> {
     pub async fn new(spawner: &'a Spawner, mac_addr: [u8; 6]) -> Self {
         let mut config = Config::default();
+
         // Configuring STM32 for ethernet
         {
             use embassy_stm32::rcc::*;
@@ -116,6 +119,8 @@ impl<'a> Board<'a> {
             config.rcc.sys = Sysclk::PLL1_P;
         }
         let p = embassy_stm32::init(config);
+
+        let display = Self::init_display(p.SPI2, p.PB10, p.PC3, p.PC2, p.PC9, p.PD11, p.PC8);
 
         let stack = Self::init_ethernet(
             spawner, p.RNG, p.ETH, p.PA1, p.PA2, p.PC1, p.PA7, p.PC4, p.PC5, p.PB12, p.PB13,
@@ -228,6 +233,7 @@ impl<'a> Board<'a> {
             stack,
             eeprom,
             flash,
+            display,
         }
     }
 
@@ -454,5 +460,17 @@ impl<'a> Board<'a> {
         cs: PD7,
     ) -> BuddyFlash<'a> {
         flash::init_flash(peri, sck, mosi, miso, tx_dma, rx_dma, cs)
+    }
+
+    pub fn init_display(
+        peri: SPI2,
+        sck: PB10,
+        mosi: PC3,
+        miso: PC2,
+        cs: PC9,
+        dc: PD11,
+        rst: PC8,
+    ) -> BuddyDisplay<'a> {
+        display::init_display(peri, sck, mosi, miso, cs, dc, rst)
     }
 }
