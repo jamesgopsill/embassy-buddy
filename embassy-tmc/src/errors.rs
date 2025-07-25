@@ -24,4 +24,6 @@ pub enum TMCError {
     UsartError,
     #[error("Write Error. Ifcnt before: {0}, Ifcnt after: {1}")]
     WriteError(u8, u8),
+    #[error("Timeout Error")]
+    TimeoutError,
 }

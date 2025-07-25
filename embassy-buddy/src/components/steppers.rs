@@ -33,10 +33,12 @@ pub struct BuddySteppers<'a> {
 pub type BuddyUart = Mutex<ThreadModeRawMutex, BufferedUart<'static>>;
 
 pub(crate) fn init_stepper_usart(usart: USART2, tx: PD5) -> &'static BuddyUart {
-    static TX: StaticCell<[u8; 24]> = StaticCell::new();
-    let tx_buf = TX.init([0u8; 24]);
-    static RX: StaticCell<[u8; 24]> = StaticCell::new();
-    let rx_buf = RX.init([0u8; 24]);
+    // 20 is the maximum expected from a write request.
+    static TX: StaticCell<[u8; 20]> = StaticCell::new();
+    let tx_buf = TX.init([0u8; 20]);
+    // Only tx is used as it is a single wire. Can have a minmal RX buf.
+    static RX: StaticCell<[u8; 1]> = StaticCell::new();
+    let rx_buf = RX.init([0u8; 1]);
     let config = Config::default();
     static UART: StaticCell<BuddyUart> = StaticCell::new();
     let uart = BufferedUart::new_half_duplex(
@@ -46,11 +48,11 @@ pub(crate) fn init_stepper_usart(usart: USART2, tx: PD5) -> &'static BuddyUart {
         tx_buf,
         rx_buf,
         config,
+        // Must be set to Readback for the uart to work.
         HalfDuplexReadback::Readback,
         HalfDuplexConfig::PushPull,
     )
     .unwrap();
-    uart.set_baudrate(115_200).unwrap();
     UART.init(Mutex::new(uart))
 }
 
