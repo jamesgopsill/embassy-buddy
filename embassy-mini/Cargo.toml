@@ -38,6 +38,7 @@ embassy-time = { version = "0.4.0", features = [
     #"tick-hz-80_000",
 ] }
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
+embedded-graphics = { version = "0.8.0" }
 embassy-buddy = { path = "../embassy-buddy" }
 embassy-printer = { path = "../embassy-printer" }
 #picoserve = { version = "0.16.0", features = ["embassy"] }

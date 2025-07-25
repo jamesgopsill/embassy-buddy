@@ -2,16 +2,16 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum TMCError {
-    #[error("Invalid motor address. Expected: 0-3, Received: {0}")]
-    InvalidMotorAddress(u8),
+    #[error("Invalid driver address. Expected: 0-3, Received: {0}")]
+    InvalidDriverAddress(u8),
     #[error("The SYNC byte was invalid. Expected: 5, Received: {0}")]
     InvalidSyncByte(u8),
     #[error("Invalid 8-bit master address. Expected: 255, Received: {0}")]
     InvalidMasterAddress(u8),
     #[error("The CRC received and the CRC constructed do not match.")]
     CrcDoesNotMatch,
-    #[error("Motor Addresses do not match. Expected: {0}, Recevied: {1}")]
-    MotorAddrDoesNotMatch(u8, u8),
+    #[error("Driver addresses do not match. Expected: {0}, Recevied: {1}")]
+    AddrDoesNotMatch(u8, u8),
     #[error("Register Addresses do not match. Expected: {0}, Recevied: {1}")]
     RegisterAddrDoesNotMatch(u8, u8),
     #[error("Incorrect Datagram Length. Expected: 8, Received: {0}")]
@@ -22,4 +22,6 @@ pub enum TMCError {
     UnpackingError,
     #[error("Usart Error")]
     UsartError,
+    #[error("Write Error. Ifcnt before: {0}, Ifcnt after: {1}")]
+    WriteError(u8, u8),
 }

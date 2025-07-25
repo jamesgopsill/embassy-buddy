@@ -72,7 +72,7 @@ fn render_ferris(display: &BuddyDisplay) {
     let raw_image_data = ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
     const X: i32 = (240 / 2) - (86 / 2);
     const Y: i32 = (320 / 2) - 50;
-    info!("{} {}", X, Y);
+    // info!("{} {}", X, Y);
     let ferris = Image::new(&raw_image_data, Point::new(X, Y));
     display.clear(Rgb565::BLACK).unwrap();
     ferris.draw(&mut *display).unwrap();

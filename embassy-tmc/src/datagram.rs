@@ -19,56 +19,52 @@ pub trait Datagram: PackedStructSlice + Default {
     /// Create a read register request.
     fn read_request(motor_addr: u8) -> Result<[u8; 4], TMCError> {
         if motor_addr > 3 {
-            return Err(TMCError::InvalidMotorAddress(motor_addr));
+            return Err(TMCError::InvalidDriverAddress(motor_addr));
         }
         let crc = crc8_atm(&[SYNC_BYTE, motor_addr, Self::read_reg_addr()]);
         Ok([SYNC_BYTE, motor_addr, Self::read_reg_addr(), crc])
     }
 
-    /// Perform a read and return the datagram
-    async fn read<T: Read + Write>(usart: &mut T, motor_addr: u8) -> Result<Self, TMCError> {
-        let datagram = Self::read_request(motor_addr)?;
+    /// Performs a read request on the given driver usart and address. Expects ReadBack mode on the usart.
+    async fn read<T: Read + Write>(usart: &mut T, addr: u8) -> Result<Self, TMCError> {
+        let datagram = Self::read_request(addr)?;
+        info!("[TMC] Read Request: {}", datagram);
         if usart.write(datagram.as_slice()).await.is_err() {
             return Err(TMCError::UsartError);
         }
-        let mut msg = [0u8; 16];
-        // Expects the uart to be set into readback mode so it will
-        // return both the request and response. Thus, we need to
-        // know the length of what we sent so we can pull out the response
-        // from the array.
-        let start = datagram.len();
-        let end: usize = match start {
-            4 => 12, // Read Requests
-            8 => 16, // Write Requests
-            // Should not occur as we should have generated a
-            // valid datagram from the impl.
-            _ => return Err(TMCError::DatagramLength(start)),
-        };
-
-        // Async read bytes as they are returned.
-        usart.read_exact(&mut msg[..end]).await.unwrap();
-        //info!("Bytes Received: {}", msg[..end]);
-        let msg = &mut msg[..end];
-
-        //info!("Updating Register");
-        //sel.parse(&msg[start..end])?;
+        // Expect readback mode so 12 bytes (4 read request + 8 response).
+        let mut buf: [u8; 12] = [0u8; 12];
+        usart.read_exact(&mut buf).await.unwrap();
+        info!("[TMC] Request + Response: {}", buf);
+        let msg = &buf[4..];
         Self::from_datagram(msg)
     }
 
-    /// Write the datagram back into the register.
-    async fn write<T: Read + Write>(
-        &mut self,
-        usart: &mut T,
-        motor_addr: u8,
-    ) -> Result<(), TMCError> {
-        let ifcnt_before = IfCnt::read(usart, motor_addr).await?;
+    /// Performs a write request to write a datagram to the driver register. Expects ReadBack mode on the usart.
+    async fn write<T: Read + Write>(&mut self, usart: &mut T, addr: u8) -> Result<(), TMCError> {
+        let ifcnt_before = IfCnt::read(usart, addr).await?;
+        info!("[TMC] IFCNT before: {:?}", ifcnt_before);
+        let datagram = self.as_write_request(addr)?;
+        info!("[TMC] Write Request: {:?}", datagram);
 
-        let datagram = self.as_write_request(motor_addr)?;
         if usart.write(datagram.as_slice()).await.is_err() {
             return Err(TMCError::UsartError);
         }
 
-        let ifcnt_after = IfCnt::read(usart, motor_addr).await?;
+        // Check it was successful
+        let datagram = IfCnt::read_request(addr)?;
+        if usart.write(datagram.as_slice()).await.is_err() {
+            return Err(TMCError::UsartError);
+        }
+
+        // Buffer is 8 write request + 4 read request + 8 response.
+        let mut buf: [u8; 20] = [0u8; 20];
+        usart.read_exact(&mut buf).await.unwrap();
+
+        info!("[TMC] Write + IfCnt + Response: {}", buf);
+        let msg = &buf[12..];
+        let ifcnt_after = IfCnt::from_datagram(msg)?;
+        info!("[TMC] IFCNT after: {:?}", ifcnt_before);
 
         // The ifcnt wraps if it goes over `u8::MAX` so we need to
         // check if it is either greater than the previous value
@@ -79,14 +75,14 @@ pub trait Datagram: PackedStructSlice + Default {
         {
             Ok(())
         } else {
-            Err(TMCError::UsartError)
+            Err(TMCError::WriteError(ifcnt_before.cnt, ifcnt_after.cnt))
         }
     }
 
-    /// TODO
+    /// Transforms a Datagram into a write request.
     fn as_write_request(&self, uart_addr: u8) -> Result<[u8; 8], TMCError> {
         if uart_addr > 3 {
-            return Err(TMCError::InvalidMotorAddress(uart_addr));
+            return Err(TMCError::InvalidDriverAddress(uart_addr));
         }
         let mut payload: [u8; 4] = [0u8; 4];
         if self.pack_to_slice(&mut payload).is_err() {

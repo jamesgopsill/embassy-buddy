@@ -8,7 +8,7 @@ use embassy_buddy::{
     components::{
         display::BuddyDisplay, filament_sensor::BuddyFilamentSensor, pinda::BuddyPinda,
         rotary_button::BuddyRotaryButton, rotary_encoder::BuddyRotaryEncoder,
-        steppers::BuddyStepperInterruptDia, thermistors::BuddyThermistor,
+        steppers::BuddyStepperExti, thermistors::BuddyThermistor,
     },
 };
 use embassy_executor::Spawner;
@@ -124,7 +124,7 @@ async fn report_temp(sensor: &BuddyThermistor<'_>, label: &str) -> ! {
     }
 }
 
-async fn back_and_forth(stepper: &BuddyStepperInterruptDia<'_>, label: &str) {
+async fn back_and_forth(stepper: &BuddyStepperExti<'_>, label: &str) {
     stepper.enable().await;
     let mut n = 0;
     let microstep = 64;

@@ -15,8 +15,24 @@ async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(Default::default());
     let uart = Board::init_stepper_usart(p.USART2, p.PD5);
     let stepper = Board::init_x_stepper(uart, p.PD3, p.PD1, p.PD0, p.PE2, p.EXTI2);
-    //let ioin = stepper.read_ioin().await.unwrap();
-    //info!("Ioin enn: {}", ioin.enn);
+    let ioin = stepper.read_ioin().await.unwrap();
+    info!("IOIN enn: {}", ioin.enn);
+    let mut gconf = stepper.read_gconf().await.unwrap();
+    info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
+    gconf.mstep_reg_select = true;
+    info!("Writing Update");
+    stepper.write(&mut gconf).await.unwrap();
+    info!("Reading Updated GCONF");
+    let gconf = stepper.read_gconf().await.unwrap();
+    info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
+
+    let mut chopconf = stepper.read_chopconf().await.unwrap();
+    let mres: u8 = chopconf.mres.into();
+    info!("CHOPCONF MRES: {:?}", mres);
+
+    chopconf.mres = 4.into();
+    stepper.write(&mut chopconf).await.unwrap();
+
     let fut = back_and_forth(&stepper);
     fut.await;
 }

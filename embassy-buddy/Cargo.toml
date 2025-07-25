@@ -46,7 +46,7 @@ embassy-time = { version = "0.4.0", features = [
     "tick-hz-32_768", # Recommended
     #"tick-hz-80_000",
 ] }
-embassy-tmc = { path = "../embassy-tmc" }
+embassy-tmc = { path = "../embassy-tmc", features = ["defmt"] }
 libm = "0.2.11"
 packed_struct = { version = "0.10.1", default-features = false }
 thiserror = { version = "2.0.12", default-features = false }

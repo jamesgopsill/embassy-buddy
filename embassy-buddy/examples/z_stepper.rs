@@ -15,6 +15,16 @@ async fn main(_spawner: Spawner) {
     let p = embassy_stm32::init(Default::default());
     let uart = Board::init_stepper_usart(p.USART2, p.PD5);
     let stepper = Board::init_z_stepper(uart, p.PD2, p.PD4, p.PD15, p.PE5, p.EXTI5);
+    let ioin = stepper.read_ioin().await.unwrap();
+    info!("IOIN enn: {}", ioin.enn);
+    let mut gconf = stepper.read_gconf().await.unwrap();
+    info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
+    gconf.mstep_reg_select = false;
+    info!("Writing Update");
+    stepper.write(&mut gconf).await.unwrap();
+    info!("Reading Updated GCONF");
+    let gconf = stepper.read_gconf().await.unwrap();
+    info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
     let fut = back_and_forth(&stepper);
     fut.await;
 }
@@ -29,18 +39,20 @@ async fn back_and_forth(stepper: &BuddyStepperExti<'_>) {
         if n > 3 {
             break;
         }
+        info!("CounterClockwise");
+        stepper.set_direction(Direction::CounterClockwise).await;
+        for _ in 0..300 * microstep {
+            stepper.try_step().unwrap();
+            Timer::after_micros(100).await
+        }
+        /*
         info!("Clockwise");
         stepper.set_direction(Direction::Clockwise).await;
         for _ in 0..100 * microstep {
             stepper.try_step().unwrap();
             Timer::after_micros(100).await
         }
-        info!("CounterClockwise");
-        stepper.set_direction(Direction::CounterClockwise).await;
-        for _ in 0..100 * microstep {
-            stepper.try_step().unwrap();
-            Timer::after_micros(100).await
-        }
+        */
     }
     info!("Stepper Disabled");
     stepper.disable().await;
