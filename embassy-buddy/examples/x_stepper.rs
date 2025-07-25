@@ -1,38 +1,27 @@
 #![no_std]
 #![no_main]
 
-use cortex_m::asm::nop;
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::Board;
+use embassy_buddy::{Board, components::steppers::BuddyStepperExti};
 use embassy_executor::Spawner;
-use embassy_stm32::{exti::ExtiInput, gpio::Output, usart::BufferedUart};
-use embassy_sync::blocking_mutex::raw::ThreadModeRawMutex;
 use embassy_time::Timer;
-use embassy_tmc::{direction::Direction, tmc2209::TMC2209AsyncUart};
+use embassy_tmc::direction::Direction;
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
     let p = embassy_stm32::init(Default::default());
-
-    // !important - must initialise usart first otherwise stepper init will error.
-    Board::init_stepper_usart(p.USART2, p.PD5);
-    let stepper = Board::init_x_stepper(p.PD3, p.PD1, p.PD0, p.PE2, p.EXTI2)
-        .await
-        .unwrap();
-
-    let ioin = stepper.read_ioin().await.unwrap();
-    info!("Ioin enn: {}", ioin.enn);
-
+    let uart = Board::init_stepper_usart(p.USART2, p.PD5);
+    let stepper = Board::init_x_stepper(uart, p.PD3, p.PD1, p.PD0, p.PE2, p.EXTI2);
+    //let ioin = stepper.read_ioin().await.unwrap();
+    //info!("Ioin enn: {}", ioin.enn);
     let fut = back_and_forth(&stepper);
     fut.await;
 }
 
-async fn back_and_forth(
-    stepper: &TMC2209AsyncUart<'_, Output<'_>, ExtiInput<'_>, ThreadModeRawMutex, BufferedUart<'_>>,
-) -> ! {
+async fn back_and_forth(stepper: &BuddyStepperExti<'_>) {
     stepper.enable().await;
     info!("Stepper Enabled");
     let mut n = 0;
@@ -57,7 +46,4 @@ async fn back_and_forth(
     }
     info!("Stepper Disabled");
     stepper.disable().await;
-    loop {
-        nop();
-    }
 }

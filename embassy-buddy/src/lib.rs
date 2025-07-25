@@ -9,8 +9,8 @@ use embassy_tmc::errors::TMCError;
 use thiserror::Error;
 
 use crate::components::{
-    adc::{self, ADC_SAMPLE_MAX, BUDDY_ADC1},
-    bed_power_monitor::{BedPowerMonitor, BuddyPowerMonitor},
+    adc::BuddyAdc,
+    bed_power_monitor::{self, BuddyBedPowerMonitor},
     buzzer::{self, BuddyBuzzer},
     display::{self, BuddyDisplay},
     eeprom::{self, BuddyEeprom},
@@ -22,7 +22,7 @@ use crate::components::{
     pinda::{self, BuddyPinda},
     rotary_button::{self, BuddyRotaryButton},
     rotary_encoder::{self, BuddyRotaryEncoder},
-    steppers::{self, BuddyStepperInputDia, BuddyStepperInterruptDia, BuddySteppers},
+    steppers::{self, BuddyStepperExti, BuddyStepperInp, BuddySteppers, BuddyUart},
     thermistors::{BuddyThermistor, BuddyThermistors, Thermistor},
 };
 
@@ -41,7 +41,7 @@ pub enum BoardError {
 /// The buddy board struct.
 pub struct Board<'a> {
     pub buzzer: BuddyBuzzer<'a>,
-    pub bed_power: BuddyPowerMonitor<'a>,
+    pub bed_power: BuddyBedPowerMonitor,
     pub pinda_sensor: BuddyPinda<'a>,
     pub filament_sensor: BuddyFilamentSensor<'a>,
     pub rotary_button: BuddyRotaryButton<'a>,
@@ -129,8 +129,8 @@ impl<'a> Board<'a> {
         .await;
 
         // Init statics
-        Self::init_adc1(p.ADC1);
-        Self::init_stepper_usart(p.USART2, p.PD5);
+        let adc = Self::init_adc1(p.ADC1);
+        let usart = Self::init_stepper_usart(p.USART2, p.PD5);
 
         // init components
         let buzzer = Self::init_buzzer(p.PA0, p.TIM2);
@@ -144,33 +144,19 @@ impl<'a> Board<'a> {
         let heaters = Self::init_heaters(p.PB0, p.PB1, p.TIM3);
 
         // Thermistors (should not fail as we have initialised ADC1).
-        let hotend = Self::init_hotend_thermistor(p.PC0, 4_092.0, 100_000.0, 25.0)
-            .await
-            .unwrap();
-        let bed = Self::init_bed_thermistor(p.PA4, 4_550.0, 100_000.0, 25.0)
-            .await
-            .unwrap();
-        let board = Self::init_board_thermistor(p.PA5, 4_267.0, 100_000.0, 25.0)
-            .await
-            .unwrap();
+        let hotend = Self::init_hotend_thermistor(adc, p.PC0, 4_092.0, 100_000.0, 25.0);
+        let bed = Self::init_bed_thermistor(adc, p.PA4, 4_550.0, 100_000.0, 25.0);
+        let board = Self::init_board_thermistor(adc, p.PA5, 4_267.0, 100_000.0, 25.0);
         let thermistors = BuddyThermistors { hotend, bed, board };
 
         // Bed Power Monitor (should not fail as we have initialised ADC1).
-        let bed_power = Self::init_bed_power_monitor(p.PA3).await.unwrap();
+        let bed_power = Self::init_bed_power_monitor(p.PA3, adc);
 
         // Stepper motors (should not fail as we have initialised USART2).
-        let x_stepper = Self::init_x_stepper(p.PD3, p.PD1, p.PD0, p.PE2, p.EXTI2)
-            .await
-            .unwrap();
-        let y_stepper = Self::init_y_stepper(p.PD14, p.PD13, p.PD12, p.PE1, p.EXTI1)
-            .await
-            .unwrap();
-        let z_stepper = Self::init_z_stepper(p.PD2, p.PD4, p.PD15, p.PE5, p.EXTI5)
-            .await
-            .unwrap();
-        let e_stepper = Self::init_e_stepper(p.PD10, p.PD9, p.PD8, p.PA15)
-            .await
-            .unwrap();
+        let x_stepper = Self::init_x_stepper(usart, p.PD3, p.PD1, p.PD0, p.PE2, p.EXTI2);
+        let y_stepper = Self::init_y_stepper(usart, p.PD14, p.PD13, p.PD12, p.PE1, p.EXTI1);
+        let z_stepper = Self::init_z_stepper(usart, p.PD2, p.PD4, p.PD15, p.PE5, p.EXTI5);
+        let e_stepper = Self::init_e_stepper(usart, p.PD10, p.PD9, p.PD8, p.PA15);
 
         let steppers = BuddySteppers {
             x: x_stepper,
@@ -237,8 +223,8 @@ impl<'a> Board<'a> {
         }
     }
 
-    pub fn init_adc1(adc: ADC1) {
-        adc::init_adc1(adc);
+    pub fn init_adc1(adc: ADC1) -> &'static BuddyAdc<ADC1> {
+        BuddyAdc::new_static_adc1(adc)
     }
 
     pub async fn init_ethernet(
@@ -262,21 +248,12 @@ impl<'a> Board<'a> {
         .await
     }
 
-    pub async fn init_bed_power_monitor(pin: PA3) -> Result<BuddyPowerMonitor<'a>, BoardError> {
-        if let Some(adc) = BUDDY_ADC1.try_get() {
-            Ok(BedPowerMonitor::new(
-                adc,
-                pin.degrade_adc(),
-                ADC_SAMPLE_MAX,
-                24.0,
-            ))
-        } else {
-            Err(BoardError::Adc1NotInitialised)
-        }
+    pub fn init_bed_power_monitor(pin: PA3, adc: &'static BuddyAdc<ADC1>) -> BuddyBedPowerMonitor {
+        bed_power_monitor::init_buddy_bed_power_monitor(adc, pin.degrade_adc())
     }
 
-    pub fn init_stepper_usart(usart: USART2, tx: PD5) {
-        steppers::init_stepper_usart(usart, tx);
+    pub fn init_stepper_usart(usart: USART2, tx: PD5) -> &'static BuddyUart {
+        steppers::init_stepper_usart(usart, tx)
     }
 
     pub fn init_pinda(pin: PA8, ch: EXTI8) -> BuddyPinda<'a> {
@@ -287,83 +264,55 @@ impl<'a> Board<'a> {
         buzzer::init_buzzer(ch, tim)
     }
 
-    pub async fn init_default_bed_thermistor(pin: PA4) -> Result<BuddyThermistor<'a>, BoardError> {
-        Self::init_bed_thermistor(pin, 4_092.0, 100_000.0, 25.0).await
+    pub fn init_default_bed_thermistor(
+        adc: &'static BuddyAdc<ADC1>,
+        pin: PA4,
+    ) -> BuddyThermistor<'a> {
+        Self::init_bed_thermistor(adc, pin, 4_092.0, 100_000.0, 25.0)
     }
 
-    pub async fn init_bed_thermistor(
+    pub fn init_bed_thermistor(
+        adc: &'static BuddyAdc<ADC1>,
         pin: PA4,
         beta: f64,
         r_ref: f64,
         t_ref: f64,
-    ) -> Result<BuddyThermistor<'a>, BoardError> {
-        if let Some(adc) = BUDDY_ADC1.try_get() {
-            Ok(Thermistor::new(
-                adc,
-                pin.degrade_adc(),
-                4_700.0,
-                ADC_SAMPLE_MAX,
-                beta,
-                r_ref,
-                t_ref,
-            ))
-        } else {
-            Err(BoardError::Adc1NotInitialised)
-        }
+    ) -> BuddyThermistor<'a> {
+        Thermistor::new(adc, pin.degrade_adc(), 4_700.0, beta, r_ref, t_ref)
     }
 
-    pub async fn init_default_board_thermistor(
+    pub fn init_default_board_thermistor(
+        adc: &'static BuddyAdc<ADC1>,
         pin: PA5,
-    ) -> Result<BuddyThermistor<'a>, BoardError> {
-        Self::init_board_thermistor(pin, 4_550.0, 100_000.0, 25.0).await
+    ) -> BuddyThermistor<'a> {
+        Self::init_board_thermistor(adc, pin, 4_550.0, 100_000.0, 25.0)
     }
 
-    pub async fn init_board_thermistor(
+    pub fn init_board_thermistor(
+        adc: &'static BuddyAdc<ADC1>,
         pin: PA5,
         beta: f64,
         r_ref: f64,
         t_ref: f64,
-    ) -> Result<BuddyThermistor<'a>, BoardError> {
-        if let Some(adc) = BUDDY_ADC1.try_get() {
-            Ok(Thermistor::new(
-                adc,
-                pin.degrade_adc(),
-                4_700.0,
-                ADC_SAMPLE_MAX,
-                beta,
-                r_ref,
-                t_ref,
-            ))
-        } else {
-            Err(BoardError::Adc1NotInitialised)
-        }
+    ) -> BuddyThermistor<'a> {
+        Thermistor::new(adc, pin.degrade_adc(), 4_700.0, beta, r_ref, t_ref)
     }
 
-    pub async fn init_default_hotend_thermistor(
+    pub fn init_default_hotend_thermistor(
+        adc: &'static BuddyAdc<ADC1>,
         pin: PC0,
-    ) -> Result<BuddyThermistor<'a>, BoardError> {
-        Self::init_hotend_thermistor(pin, 4_267.0, 100_000.0, 25.0).await
+    ) -> BuddyThermistor<'a> {
+        Self::init_hotend_thermistor(adc, pin, 4_267.0, 100_000.0, 25.0)
     }
 
-    pub async fn init_hotend_thermistor(
+    pub fn init_hotend_thermistor(
+        adc: &'static BuddyAdc<ADC1>,
         pin: PC0,
         beta: f64,
         r_ref: f64,
         t_ref: f64,
-    ) -> Result<BuddyThermistor<'a>, BoardError> {
-        if let Some(adc) = BUDDY_ADC1.try_get() {
-            Ok(Thermistor::new(
-                adc,
-                pin.degrade_adc(),
-                4_700.0,
-                ADC_SAMPLE_MAX,
-                beta,
-                r_ref,
-                t_ref,
-            ))
-        } else {
-            Err(BoardError::Adc1NotInitialised)
-        }
+    ) -> BuddyThermistor<'a> {
+        Thermistor::new(adc, pin.degrade_adc(), 4_700.0, beta, r_ref, t_ref)
     }
 
     pub fn init_fans(
@@ -401,43 +350,47 @@ impl<'a> Board<'a> {
         heaters::init_heaters(bed, hotend, tim)
     }
 
-    pub async fn init_x_stepper(
+    pub fn init_x_stepper(
+        uart: &'static BuddyUart,
         en: PD3,
         step: PD1,
         dir: PD0,
         dia_pin: PE2,
         dia_ch: EXTI2,
-    ) -> Result<BuddyStepperInterruptDia<'a>, BoardError> {
-        steppers::init_x_stepper(en, step, dir, dia_pin, dia_ch).await
+    ) -> BuddyStepperExti<'a> {
+        steppers::init_x_stepper(uart, en, step, dir, dia_pin, dia_ch)
     }
 
-    pub async fn init_y_stepper(
+    pub fn init_y_stepper(
+        uart: &'static BuddyUart,
         en: PD14,
         step: PD13,
         dir: PD12,
         dia_pin: PE1,
         dia_ch: EXTI1,
-    ) -> Result<BuddyStepperInterruptDia<'a>, BoardError> {
-        steppers::init_y_stepper(en, step, dir, dia_pin, dia_ch).await
+    ) -> BuddyStepperExti<'a> {
+        steppers::init_y_stepper(uart, en, step, dir, dia_pin, dia_ch)
     }
 
-    pub async fn init_z_stepper(
+    pub fn init_z_stepper(
+        uart: &'static BuddyUart,
         en: PD2,
         step: PD4,
         dir: PD15,
         dia_pin: PE5,
         dia_ch: EXTI5,
-    ) -> Result<BuddyStepperInterruptDia<'a>, BoardError> {
-        steppers::init_z_stepper(en, step, dir, dia_pin, dia_ch).await
+    ) -> BuddyStepperExti<'a> {
+        steppers::init_z_stepper(uart, en, step, dir, dia_pin, dia_ch)
     }
 
-    pub async fn init_e_stepper(
+    pub fn init_e_stepper(
+        uart: &'static BuddyUart,
         en: PD10,
         step: PD9,
         dir: PD8,
         dia_pin: PA15,
-    ) -> Result<BuddyStepperInputDia<'a>, BoardError> {
-        steppers::init_e_stepper(en, step, dir, dia_pin).await
+    ) -> BuddyStepperInp<'a> {
+        steppers::init_e_stepper(uart, en, step, dir, dia_pin)
     }
 
     pub fn init_eeprom(

@@ -6,15 +6,22 @@ use defmt_rtt as _;
 use embassy_buddy::{
     Board,
     components::{
-        filament_sensor::BuddyFilamentSensor, pinda::BuddyPinda, rotary_button::BuddyRotaryButton,
-        rotary_encoder::BuddyRotaryEncoder, steppers::BuddyStepperInterruptDia,
-        thermistors::BuddyThermistor,
+        display::BuddyDisplay, filament_sensor::BuddyFilamentSensor, pinda::BuddyPinda,
+        rotary_button::BuddyRotaryButton, rotary_encoder::BuddyRotaryEncoder,
+        steppers::BuddyStepperInterruptDia, thermistors::BuddyThermistor,
     },
 };
 use embassy_executor::Spawner;
-use embassy_futures::join::{join, join5};
+use embassy_futures::join::{join3, join5};
 use embassy_time::Timer;
 use embassy_tmc::direction::Direction;
+use embedded_graphics::{
+    image::{Image, ImageRawLE},
+    mono_font::{MonoTextStyle, iso_8859_16::FONT_10X20},
+    pixelcolor::Rgb565,
+    prelude::*,
+    text::{Alignment, Text},
+};
 use panic_probe as _;
 
 #[embassy_executor::main]
@@ -33,11 +40,40 @@ async fn main(spawner: Spawner) {
     let fut_08 = back_and_forth(&board.steppers.x, "[STEPPER_X]");
     let fut_09 = back_and_forth(&board.steppers.y, "[STEPPER_Y]");
     let fut_10 = back_and_forth(&board.steppers.z, "[STEPPER_Z]");
+    let fut_11 = display_ferris(&board.display);
 
     let fut = join5(fut_01, fut_02, fut_03, fut_04, fut_05);
     let fut = join5(fut, fut_06, fut_07, fut_08, fut_09);
-    let fut = join(fut, fut_10);
+    let fut = join3(fut, fut_10, fut_11);
     fut.await;
+}
+
+async fn display_ferris(p: &BuddyDisplay<'_>) {
+    let mut display = p.lock().await;
+    display.clear(Rgb565::BLACK).unwrap();
+
+    info!("[DISPLAY] FERRIS!");
+
+    let raw_image_data = ImageRawLE::new(include_bytes!("../assets/ferris.raw"), 86);
+    const X: i32 = (240 / 2) - (86 / 2);
+    const Y: i32 = (320 / 2) - 50;
+    info!("{} {}", X, Y);
+    let ferris = Image::new(&raw_image_data, Point::new(X, Y));
+    display.clear(Rgb565::BLACK).unwrap();
+    ferris.draw(&mut *display).unwrap();
+
+    let text_style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
+    let text = "Embassy Buddy! ^_^";
+    Text::with_alignment(
+        text,
+        Point::new(240 / 2, 195),
+        text_style,
+        Alignment::Center,
+    )
+    .draw(&mut *display)
+    .unwrap();
+
+    info!("[DISPLAY] Rendering Complete");
 }
 
 async fn pinda_interrupt(p: &BuddyPinda<'_>) -> ! {
@@ -88,7 +124,7 @@ async fn report_temp(sensor: &BuddyThermistor<'_>, label: &str) -> ! {
     }
 }
 
-async fn back_and_forth(stepper: &BuddyStepperInterruptDia<'_>, label: &str) -> ! {
+async fn back_and_forth(stepper: &BuddyStepperInterruptDia<'_>, label: &str) {
     stepper.enable().await;
     let mut n = 0;
     let microstep = 64;
@@ -112,7 +148,4 @@ async fn back_and_forth(stepper: &BuddyStepperInterruptDia<'_>, label: &str) -> 
     }
     info!("{} Disabled", label);
     stepper.disable().await;
-    loop {
-        Timer::after_secs(1).await;
-    }
 }

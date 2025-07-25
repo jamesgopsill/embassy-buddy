@@ -71,3 +71,4 @@ embassy-executor = { version = "0.7.0", features = [
     "defmt",
 ] }
 embedded-graphics = { version = "0.8.0" }
+heapless = { version = "0.8.0" }

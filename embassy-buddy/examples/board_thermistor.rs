@@ -12,11 +12,8 @@ use panic_probe as _;
 async fn main(_spawner: Spawner) {
     info!("Booting...");
     let p = embassy_stm32::init(Default::default());
-
-    // !important. The ADC1 needs to be initialised.
-    Board::init_adc1(p.ADC1);
-    let probe = Board::init_default_board_thermistor(p.PA5).await.unwrap();
-
+    let adc = Board::init_adc1(p.ADC1);
+    let probe = Board::init_default_board_thermistor(adc, p.PA5);
     let fut = temp(probe);
     fut.await;
 }

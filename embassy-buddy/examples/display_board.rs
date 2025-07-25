@@ -19,7 +19,8 @@ async fn main(_spawner: Spawner) {
     info!("Booting...");
     let p = embassy_stm32::init(Default::default());
 
-    let mut display = Board::init_display(p.SPI2, p.PB10, p.PC3, p.PC2, p.PC9, p.PD11, p.PC8);
+    let display = Board::init_display(p.SPI2, p.PB10, p.PC3, p.PC2, p.PC9, p.PD11, p.PC8);
+    let mut display = display.try_lock().unwrap();
 
     display.clear(Rgb565::BLACK).unwrap();
 
@@ -31,7 +32,7 @@ async fn main(_spawner: Spawner) {
     info!("{} {}", X, Y);
     let ferris = Image::new(&raw_image_data, Point::new(X, Y));
     display.clear(Rgb565::BLACK).unwrap();
-    ferris.draw(&mut display).unwrap();
+    ferris.draw(&mut *display).unwrap();
 
     let text_style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
     let text = "Embassy Buddy! ^_^";
@@ -41,7 +42,7 @@ async fn main(_spawner: Spawner) {
         text_style,
         Alignment::Center,
     )
-    .draw(&mut display)
+    .draw(&mut *display)
     .unwrap();
 
     info!("Rendering Done");

@@ -19,7 +19,10 @@ use mipidsi::{Builder, Display, interface::SpiInterface, models::ST7789, options
 use static_cell::StaticCell;
 
 pub type BuddyLcd<'a> = LcdDevice<ThreadModeRawMutex, Spi<'a, Blocking>, Output<'a>>;
-pub type BuddyDisplay<'a> = Display<SpiInterface<'a, BuddyLcd<'a>, Output<'a>>, ST7789, Output<'a>>;
+pub type BuddyDisplay<'a> = Mutex<
+    ThreadModeRawMutex,
+    Display<SpiInterface<'a, BuddyLcd<'a>, Output<'a>>, ST7789, Output<'a>>,
+>;
 
 pub fn init_display<'a>(
     peri: SPI2,
@@ -49,12 +52,13 @@ pub fn init_display<'a>(
     // Create the display
     let rst = Output::new(rst, Level::Low, Speed::VeryHigh);
     let mut delay = embassy_time::Delay;
-    Builder::new(ST7789, di)
+    let display = Builder::new(ST7789, di)
         .display_size(240, 320)
         .reset_pin(rst)
         .orientation(Orientation::new().flip_vertical().flip_horizontal())
         .init(&mut delay)
-        .unwrap()
+        .unwrap();
+    Mutex::new(display)
 }
 
 pub struct LcdDevice<M: RawMutex, T: SpiBus, O: OutputPin> {

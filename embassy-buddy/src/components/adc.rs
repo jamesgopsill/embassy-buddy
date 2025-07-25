@@ -1,25 +1,21 @@
 use embassy_stm32::{
     adc::{Adc, AdcChannel, Instance},
-    peripherals::ADC1,
+    peripherals::{ADC1, ADC2, ADC3},
 };
 use embassy_sync::{
     blocking_mutex::raw::ThreadModeRawMutex,
     mutex::{Mutex, TryLockError},
-    once_lock::OnceLock,
 };
-
-pub(crate) static BUDDY_ADC1: OnceLock<BuddyAdc<ADC1>> = OnceLock::new();
-
-pub(crate) const ADC_SAMPLE_MAX: u16 = (1 << 12) - 1;
+use static_cell::StaticCell;
 
 pub struct BuddyAdc<T: Instance> {
     adc: Mutex<ThreadModeRawMutex, Adc<'static, T>>,
 }
 
 impl<T: Instance> BuddyAdc<T> {
-    pub fn new(peripheral: T) -> Self {
+    pub fn new(peri: T) -> Self {
         Self {
-            adc: Mutex::new(Adc::new(peripheral)),
+            adc: Mutex::new(Adc::new(peri)),
         }
     }
 
@@ -33,11 +29,32 @@ impl<T: Instance> BuddyAdc<T> {
         let mut adc = self.adc.lock().await;
         adc.blocking_read(ch)
     }
+
+    pub fn max_value(&self) -> u16 {
+        (1 << 12) - 1
+    }
 }
 
-pub(crate) fn init_adc1(peripheral: ADC1) {
-    let adc = BuddyAdc::new(peripheral);
-    if BUDDY_ADC1.init(adc).is_err() {
-        panic!("ADC already initiliased");
+impl BuddyAdc<ADC1> {
+    pub fn new_static_adc1(peri: ADC1) -> &'static Self {
+        let adc = Self::new(peri);
+        static ADC: StaticCell<BuddyAdc<ADC1>> = StaticCell::new();
+        ADC.init(adc)
+    }
+}
+
+impl BuddyAdc<ADC2> {
+    pub fn new_static_adc2(peri: ADC2) -> &'static Self {
+        let adc = Self::new(peri);
+        static ADC: StaticCell<BuddyAdc<ADC2>> = StaticCell::new();
+        ADC.init(adc)
+    }
+}
+
+impl BuddyAdc<ADC3> {
+    pub fn new_static_adc3(peri: ADC3) -> &'static Self {
+        let adc = Self::new(peri);
+        static ADC: StaticCell<BuddyAdc<ADC3>> = StaticCell::new();
+        ADC.init(adc)
     }
 }
