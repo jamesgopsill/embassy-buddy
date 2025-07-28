@@ -18,6 +18,7 @@ use packed_struct::{
 
 use crate::{datagram::Datagram, direction::Direction, errors::TMCError};
 
+/// A struct that provides the API to interact with the TMC2209 driver.
 pub struct TMC2209<'a, R: RawMutex, O, I, U> {
     en: Mutex<R, O>,
     step: Mutex<R, O>,
@@ -36,6 +37,7 @@ impl<
     U,
 > TMC2209<'a, R, O, I, U>
 {
+    /// Create a new driver instance with no usart and an interruptable dia pin.
     pub fn new_no_usart_interruptable(en: O, step: O, dir: O, dia: I) -> Self {
         Self {
             en: Mutex::new(en),
@@ -56,6 +58,7 @@ impl<
     U,
 > TMC2209<'a, R, O, I, U>
 {
+    /// Create a new driver instance with no usart and no interruptable dia pin.
     pub fn new_no_usart_no_interrupt(en: O, step: O, dir: O, dia: I) -> Self {
         Self {
             en: Mutex::new(en),
@@ -76,7 +79,8 @@ impl<
     U: Read + Write,
 > TMC2209<'a, R, O, I, U>
 {
-    pub fn new_usart_interruptable(
+    /// Create a new driver instance with an async usart connection and an interruptable dia pin.
+    pub fn new_async_usart_interruptable(
         en: O,
         step: O,
         dir: O,
@@ -106,7 +110,8 @@ impl<
     U: Read + Write,
 > TMC2209<'a, R, O, I, U>
 {
-    pub fn new_usart_no_interrupt(
+    /// Create a new driver instance with an async usart connection and no interruptable dia pin.
+    pub fn new_async_usart_no_interrupt(
         en: O,
         step: O,
         dir: O,
@@ -137,6 +142,7 @@ impl<'a, R: RawMutex, O: OutputPin<Error = Infallible>, I, U> TMC2209<'a, R, O, 
         en.set_low().unwrap();
     }
 
+    /// Tries immediate locking of the enable pin mutex and powering on of the (powers stage on) the stepper motor by setting Pin 2 low ([TMC2209 Datasheet Page 9][https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.09.pdf]).
     pub fn try_enable(&self) -> Result<(), TryLockError> {
         let mut en = self.en.try_lock()?;
         en.set_low().unwrap();
@@ -149,6 +155,7 @@ impl<'a, R: RawMutex, O: OutputPin<Error = Infallible>, I, U> TMC2209<'a, R, O, 
         en.set_high().unwrap();
     }
 
+    ///  Tries immediate locking of the enable pin mutex and disabling (power stage off) the stepper motor by setting Pin 2 high ([TMC2209 Datasheet Page 9][https://www.analog.com/media/en/technical-documentation/data-sheets/TMC2209_datasheet_rev1.09.pdf]).
     pub fn try_disable(&self) -> Result<(), TryLockError> {
         let mut en = self.en.try_lock()?;
         en.set_high().unwrap();
@@ -164,6 +171,7 @@ impl<'a, R: RawMutex, O: OutputPin<Error = Infallible>, I, U> TMC2209<'a, R, O, 
         }
     }
 
+    /// Tries immediate locking of the dir mutex so a direction change can be made.
     pub fn try_set_direction(&self, dir: Direction) -> Result<(), TryLockError> {
         let mut d = self.dir.try_lock()?;
         match dir {
@@ -181,6 +189,7 @@ impl<'a, R: RawMutex, O: StatefulOutputPin<Error = Infallible>, I, U> TMC2209<'a
         step.toggle().unwrap();
     }
 
+    /// Tries an immediate step.
     pub fn try_step(&self) -> Result<(), TryLockError> {
         let mut step = self.step.try_lock()?;
         step.toggle().unwrap();
@@ -196,6 +205,7 @@ impl<'a, R: RawMutex, O: StatefulOutputPin<Error = Infallible>, I, U> TMC2209<'a
         }
     }
 
+    /// Tries to get the direction by expecting to lock the mutex immediately.
     pub fn try_get_direction(&self) -> Result<Direction, TryLockError> {
         let mut dir = self.dir.try_lock()?;
         match dir.is_set_high().unwrap() {
@@ -212,6 +222,7 @@ impl<'a, R: RawMutex, O, I: InputPin<Error = Infallible>, U> TMC2209<'a, R, O, I
         dia.is_high().unwrap()
     }
 
+    /// Tries to lock and read the dia pin.
     pub fn try_has_errored(&self) -> Result<bool, TryLockError> {
         let mut dia = self.dia.try_lock()?;
         Ok(dia.is_high().unwrap())
@@ -219,6 +230,7 @@ impl<'a, R: RawMutex, O, I: InputPin<Error = Infallible>, U> TMC2209<'a, R, O, I
 }
 
 impl<'a, R: RawMutex, O, I: Wait<Error = Infallible>, U> TMC2209<'a, R, O, I, U> {
+    /// Enables an aync wait for an error on the dia pin.
     pub async fn on_error(&self) {
         let mut dia = self.dia.lock().await;
         dia.wait_for_rising_edge().await.unwrap();
@@ -226,78 +238,91 @@ impl<'a, R: RawMutex, O, I: Wait<Error = Infallible>, U> TMC2209<'a, R, O, I, U>
 }
 
 impl<'a, R: RawMutex, O, I, U: Read + Write> TMC2209<'a, R, O, I, U> {
+    /// Writes a register to the TMC2209
     pub async fn write(&self, register: &mut impl Datagram) -> Result<(), TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         register.write(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the IFCNT register.
     pub async fn read_ifcnt(&self) -> Result<IfCnt, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         IfCnt::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the IOIN register.
     pub async fn read_ioin(&self) -> Result<Ioin, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         Ioin::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the GCONF register.
     pub async fn read_gconf(&self) -> Result<Gconf, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         Gconf::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the GSTAT register.
     pub async fn read_gstat(&self) -> Result<GStat, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         GStat::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the NODECONF register.
     pub async fn read_nodeconf(&self) -> Result<NodeConf, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         NodeConf::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the IHOLDRUN register.
     pub async fn read_iholdirun(&self) -> Result<IHoldIRun, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         IHoldIRun::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the TPOWERDOWN register.
     pub async fn read_tpowerdown(&self) -> Result<TPowerDown, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         TPowerDown::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the TSTEP register.
     pub async fn read_tstep(&self) -> Result<TStep, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         TStep::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the TPWMTHRS register.
     pub async fn read_tpwmthrs(&self) -> Result<TpwmThrs, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         TpwmThrs::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the VACTUAL register.
     pub async fn read_vactual(&self) -> Result<VActual, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         VActual::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the CHOPCONF register.
     pub async fn read_chopconf(&self) -> Result<ChopConf, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
         ChopConf::read(usart.deref_mut(), self.addr).await
     }
 
+    /// Reads the PWMCONF register.
     pub async fn read_pwmconf(&self) -> Result<PwmConf, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
@@ -305,6 +330,7 @@ impl<'a, R: RawMutex, O, I, U: Read + Write> TMC2209<'a, R, O, I, U> {
     }
 }
 
+/// A struct representing the IFCNT register.
 #[derive(PackedStruct, Default, Format)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct IfCnt {
@@ -318,6 +344,7 @@ impl Datagram for IfCnt {
     }
 }
 
+/// A stuct representing the IOIN register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct Ioin {
@@ -354,6 +381,7 @@ impl Datagram for Ioin {
     }
 }
 
+/// A struct representing the GCONF register.
 #[derive(PackedStruct, Default, Format)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct Gconf {
@@ -385,6 +413,7 @@ impl Datagram for Gconf {
     }
 }
 
+/// A struct representing the GSTAT register.
 #[derive(PackedStruct, Default, Format)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct GStat {
@@ -402,6 +431,7 @@ impl Datagram for GStat {
     }
 }
 
+/// A struct representing the NODECONF register.
 #[derive(PackedStruct, Default, Format)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct NodeConf {
@@ -415,6 +445,7 @@ impl Datagram for NodeConf {
     }
 }
 
+/// A struct representing the IHOLDIRUN register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct IHoldIRun {
@@ -432,6 +463,7 @@ impl Datagram for IHoldIRun {
     }
 }
 
+/// A struct representing the TPOWERDOWN register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct TPowerDown {
@@ -445,6 +477,7 @@ impl Datagram for TPowerDown {
     }
 }
 
+/// A struct representing the TSTEP register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct TStep {
@@ -458,6 +491,7 @@ impl Datagram for TStep {
     }
 }
 
+/// A struct representing the TPWMTHRS register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct TpwmThrs {
@@ -471,6 +505,7 @@ impl Datagram for TpwmThrs {
     }
 }
 
+/// A struct representing the VACTUAL register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct VActual {
@@ -490,6 +525,7 @@ impl Datagram for VActual {
     }
 }
 
+/// A struct representing the CHOPCONF register.
 #[derive(PackedStruct, Default)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct ChopConf {
@@ -521,6 +557,7 @@ impl Datagram for ChopConf {
     }
 }
 
+/// A struct representing the PWMCONF register.
 #[derive(PackedStruct, Default, Format)]
 #[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
 pub struct PwmConf {

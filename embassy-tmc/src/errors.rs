@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// The set of errors that may occur when interacting with the TMC driver.
 #[derive(Debug, Error)]
 pub enum TMCError {
     #[error("Invalid driver address. Expected: 0-3, Received: {0}")]

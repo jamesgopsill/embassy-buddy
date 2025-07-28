@@ -17,6 +17,13 @@ exclude = ["/tmp", "/.zed", "/examples"]
 [profile.release]
 debug = 2
 
+# Updating dev profile to be similar to release.
+# https://doc.rust-lang.org/cargo/reference/profiles.html
+[profile.dev]
+opt-level = 3
+debug = 2
+codegen-units = 16
+
 [dependencies]
 defmt = "0.3.10"
 embassy-stm32 = { version = "0.2.0", features = [

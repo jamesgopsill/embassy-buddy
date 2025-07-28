@@ -3,7 +3,7 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::bed_power_monitor::BuddyPowerMonitor};
+use embassy_buddy::{Board, components::bed_power_monitor::BuddyBedPowerMonitor};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use panic_probe as _;
@@ -18,7 +18,7 @@ async fn main(_spawner: Spawner) {
     fut.await;
 }
 
-async fn monitor(sensor: BuddyPowerMonitor<'_>) -> ! {
+async fn monitor(sensor: BuddyBedPowerMonitor) -> ! {
     loop {
         Timer::after_secs(2).await;
         let voltage = sensor.read().await;

@@ -68,7 +68,7 @@ pub(crate) fn init_x_stepper<'a>(
     let step = Output::new(step, Level::High, Speed::VeryHigh);
     let dir = Output::new(dir, Level::High, Speed::VeryHigh);
     let dia = ExtiInput::new(dia_pin, dia_ch, Pull::None);
-    TMC2209::new_usart_interruptable(en, step, dir, dia, 1, usart).unwrap()
+    TMC2209::new_async_usart_interruptable(en, step, dir, dia, 1, usart).unwrap()
 }
 
 pub(crate) fn init_y_stepper<'a>(
@@ -83,7 +83,7 @@ pub(crate) fn init_y_stepper<'a>(
     let step = Output::new(step, Level::High, Speed::VeryHigh);
     let dir = Output::new(dir, Level::High, Speed::VeryHigh);
     let dia = ExtiInput::new(dia_pin, dia_ch, Pull::None);
-    TMC2209::new_usart_interruptable(en, step, dir, dia, 3, usart).unwrap()
+    TMC2209::new_async_usart_interruptable(en, step, dir, dia, 3, usart).unwrap()
 }
 
 pub(crate) fn init_z_stepper<'a>(
@@ -98,7 +98,7 @@ pub(crate) fn init_z_stepper<'a>(
     let step = Output::new(step, Level::High, Speed::VeryHigh);
     let dir = Output::new(dir, Level::High, Speed::VeryHigh);
     let dia = ExtiInput::new(dia_pin, dia_ch, Pull::None);
-    TMC2209::new_usart_interruptable(en, step, dir, dia, 0, usart).unwrap()
+    TMC2209::new_async_usart_interruptable(en, step, dir, dia, 0, usart).unwrap()
 }
 
 pub(crate) fn init_e_stepper<'a>(
@@ -112,5 +112,5 @@ pub(crate) fn init_e_stepper<'a>(
     let step = Output::new(step, Level::High, Speed::VeryHigh);
     let dir = Output::new(dir, Level::High, Speed::VeryHigh);
     let dia = Input::new(dia_pin, Pull::None);
-    TMC2209::new_usart_no_interrupt(en, step, dir, dia, 2, usart).unwrap()
+    TMC2209::new_async_usart_no_interrupt(en, step, dir, dia, 2, usart).unwrap()
 }

@@ -5,9 +5,13 @@ use packed_struct::PackedStructSlice;
 
 use crate::{errors::TMCError, tmc2209::IfCnt};
 
+/// A byte the synchronises the communications between host and driver.
 const SYNC_BYTE: u8 = 0x05;
+
+/// The byte offset between the read and write register commands.
 const WRITE_OFFSET: u8 = 0x80;
 
+/// A trait representing the datagrams that can be written and read from the TMC2209 driver.
 pub trait Datagram: PackedStructSlice + Default {
     /// Return the address of the read register for the datagram.
     fn read_reg_addr() -> u8;
@@ -56,16 +60,16 @@ pub trait Datagram: PackedStructSlice + Default {
     async fn write<T: Read + Write>(&mut self, usart: &mut T, addr: u8) -> Result<(), TMCError> {
         let ifcnt_before = IfCnt::read(usart, addr).await?;
         // info!("[TMC] IFCNT before: {:?}", ifcnt_before);
-        let datagram = self.as_write_request(addr)?;
+        let datagram_1 = self.as_write_request(addr)?;
+        let datagram_2 = IfCnt::read_request(addr)?;
         // info!("[TMC] Write Request: {:?}", datagram);
 
-        if usart.write_all(datagram.as_slice()).await.is_err() {
+        if usart.write(datagram_1.as_slice()).await.is_err() {
             return Err(TMCError::UsartError);
         }
 
         // Check it was successful
-        let datagram = IfCnt::read_request(addr)?;
-        if usart.write(datagram.as_slice()).await.is_err() {
+        if usart.write(datagram_2.as_slice()).await.is_err() {
             return Err(TMCError::UsartError);
         }
 
@@ -84,6 +88,7 @@ pub trait Datagram: PackedStructSlice + Default {
         //info!("[TMC] Write + IfCnt + Response: {}", buf);
         let msg = &buf[12..];
         let ifcnt_after = IfCnt::from_datagram(msg)?;
+        Timer::after_millis(5).await;
         //info!("[TMC] IFCNT after: {:?}", ifcnt_after);
 
         // The ifcnt wraps if it goes over `u8::MAX` so we need to

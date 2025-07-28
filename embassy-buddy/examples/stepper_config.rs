@@ -24,8 +24,9 @@ async fn configure(steppers: &BuddySteppers<'_>) {
     let mut chopconf = steppers.x.read_chopconf().await.unwrap();
     chopconf.mres = 4.into();
     steppers.x.write(&mut chopconf).await.unwrap();
+    info!("Stepper Done");
 
-    info!("StepperY");
+    info!("Stepper Y");
     let mut gconf = steppers.y.read_gconf().await.unwrap();
     gconf.mstep_reg_select = true;
     steppers.y.write(&mut gconf).await.unwrap();
