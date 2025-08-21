@@ -34,8 +34,9 @@ embassy-time = { version = "0.4.0", features = [
     # Currently limited by 16-bit timer implementation
     # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
     # Runs well in release mode.
-    "tick-hz-32_768", # Recommended
+    #"tick-hz-32_768", # Recommended
     #"tick-hz-80_000",
+    "tick-hz-65_536",
 ] }
 panic-probe = { version = "0.3.2", features = ["print-defmt"] }
 embedded-graphics = { version = "0.8.0" }

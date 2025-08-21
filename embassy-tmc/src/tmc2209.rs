@@ -1,13 +1,14 @@
-use core::{convert::Infallible, ops::DerefMut};
+use core::convert::Infallible;
 
-use defmt::Format;
+use defmt::{Format, error};
 use embassy_sync::{
     blocking_mutex::raw::RawMutex,
     mutex::{Mutex, TryLockError},
 };
+use embassy_time::{Duration, WithTimeout};
 use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
 use embedded_hal_async::digital::Wait;
-use embedded_io_async::{Read, Write};
+use embedded_io_async::{Read, ReadReady, Write};
 use packed_struct::{
     derive::PackedStruct,
     types::{
@@ -76,7 +77,7 @@ impl<
     R: RawMutex,
     O: OutputPin<Error = Infallible> + StatefulOutputPin<Error = Infallible>,
     I: InputPin<Error = Infallible> + Wait<Error = Infallible>,
-    U: Read + Write,
+    U: Read + Write + ReadReady,
 > TMC2209<'a, R, O, I, U>
 {
     /// Create a new driver instance with an async usart connection and an interruptable dia pin.
@@ -107,7 +108,7 @@ impl<
     R: RawMutex,
     O: OutputPin<Error = Infallible> + StatefulOutputPin<Error = Infallible>,
     I: InputPin<Error = Infallible>,
-    U: Read + Write,
+    U: Read + Write + ReadReady,
 > TMC2209<'a, R, O, I, U>
 {
     /// Create a new driver instance with an async usart connection and no interruptable dia pin.
@@ -237,96 +238,80 @@ impl<'a, R: RawMutex, O, I: Wait<Error = Infallible>, U> TMC2209<'a, R, O, I, U>
     }
 }
 
-impl<'a, R: RawMutex, O, I, U: Read + Write> TMC2209<'a, R, O, I, U> {
+impl<'a, R: RawMutex, O, I, U: Read + Write + ReadReady> TMC2209<'a, R, O, I, U> {
+    /// Performs a read request on the given driver usart and address. Expects ReadBack mode on the usart.
+    pub async fn read_register(&self, register: &mut impl Datagram) -> Result<(), TMCError> {
+        let datagram = register.read_request(self.addr)?;
+        info!("[TMC2209] Read Request: {}", datagram);
+        let mut usart = self.usart.unwrap().lock().await;
+        if usart.write_all(datagram.as_slice()).await.is_err() {
+            return Err(TMCError::UsartError);
+        }
+
+        // Expect readback mode so 12 bytes (4 read request + 8 response).
+        let mut buf: [u8; 12] = [0u8; 12];
+        if usart
+            .read_exact(&mut buf)
+            .with_timeout(Duration::from_secs(1))
+            .await
+            .is_err()
+        {
+            error!("[TMC2209] Reading Timed Out: {}", buf);
+            return Err(TMCError::TimeoutError);
+        };
+        info!("[TMC2209] Read Request + Response: {}", buf);
+        let msg = &buf[4..];
+        register.update(msg)?;
+        Ok(())
+    }
+
     /// Writes a register to the TMC2209
-    pub async fn write(&self, register: &mut impl Datagram) -> Result<(), TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        register.write(usart.deref_mut(), self.addr).await
-    }
+    pub async fn write_register(&self, register: &mut impl Datagram) -> Result<(), TMCError> {
+        let mut ifcnt_before = IfCnt::default();
+        self.read_register(&mut ifcnt_before).await?;
 
-    /// Reads the IFCNT register.
-    pub async fn read_ifcnt(&self) -> Result<IfCnt, TMCError> {
         let usart = self.usart.unwrap();
         let mut usart = usart.lock().await;
-        IfCnt::read(usart.deref_mut(), self.addr).await
-    }
 
-    /// Reads the IOIN register.
-    pub async fn read_ioin(&self) -> Result<Ioin, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        Ioin::read(usart.deref_mut(), self.addr).await
-    }
+        let datagram_1 = register.as_write_request(self.addr)?;
+        let datagram_2 = IfCnt::default().read_request(self.addr)?;
+        info!("[TMC2209] Write Request: {:?}", datagram_1);
 
-    /// Reads the GCONF register.
-    pub async fn read_gconf(&self) -> Result<Gconf, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        Gconf::read(usart.deref_mut(), self.addr).await
-    }
+        if usart.write_all(datagram_1.as_slice()).await.is_err() {
+            return Err(TMCError::UsartError);
+        }
 
-    /// Reads the GSTAT register.
-    pub async fn read_gstat(&self) -> Result<GStat, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        GStat::read(usart.deref_mut(), self.addr).await
-    }
+        // Check it was successful
+        if usart.write_all(datagram_2.as_slice()).await.is_err() {
+            return Err(TMCError::UsartError);
+        }
 
-    /// Reads the NODECONF register.
-    pub async fn read_nodeconf(&self) -> Result<NodeConf, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        NodeConf::read(usart.deref_mut(), self.addr).await
-    }
+        // Buffer is 8 write request + 4 read request + 8 response.
+        let mut buf: [u8; 20] = [0u8; 20];
+        if usart
+            .read_exact(&mut buf)
+            .with_timeout(Duration::from_secs(1))
+            .await
+            .is_err()
+        {
+            error!("[TMC2209] Reading Timed Out: {}", buf);
+            return Err(TMCError::TimeoutError);
+        };
+        info!("[TMC2209] Write + IfCnt + Response: {}", buf);
+        let msg = &buf[12..];
+        let ifcnt_after = IfCnt::from_datagram(msg)?;
 
-    /// Reads the IHOLDRUN register.
-    pub async fn read_iholdirun(&self) -> Result<IHoldIRun, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        IHoldIRun::read(usart.deref_mut(), self.addr).await
-    }
-
-    /// Reads the TPOWERDOWN register.
-    pub async fn read_tpowerdown(&self) -> Result<TPowerDown, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        TPowerDown::read(usart.deref_mut(), self.addr).await
-    }
-
-    /// Reads the TSTEP register.
-    pub async fn read_tstep(&self) -> Result<TStep, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        TStep::read(usart.deref_mut(), self.addr).await
-    }
-
-    /// Reads the TPWMTHRS register.
-    pub async fn read_tpwmthrs(&self) -> Result<TpwmThrs, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        TpwmThrs::read(usart.deref_mut(), self.addr).await
-    }
-
-    /// Reads the VACTUAL register.
-    pub async fn read_vactual(&self) -> Result<VActual, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        VActual::read(usart.deref_mut(), self.addr).await
-    }
-
-    /// Reads the CHOPCONF register.
-    pub async fn read_chopconf(&self) -> Result<ChopConf, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        ChopConf::read(usart.deref_mut(), self.addr).await
-    }
-
-    /// Reads the PWMCONF register.
-    pub async fn read_pwmconf(&self) -> Result<PwmConf, TMCError> {
-        let usart = self.usart.unwrap();
-        let mut usart = usart.lock().await;
-        PwmConf::read(usart.deref_mut(), self.addr).await
+        // The ifcnt wraps if it goes over `u8::MAX` so we need to
+        // check if it is either greater than the previous value
+        // and if the previous value is `u8::MAX` then check if the
+        // count has wrapped.
+        if ifcnt_after.cnt > ifcnt_before.cnt
+            || (ifcnt_before.cnt == u8::MAX && ifcnt_after.cnt == 0)
+        {
+            Ok(())
+        } else {
+            Err(TMCError::WriteError(ifcnt_before.cnt, ifcnt_after.cnt))
+        }
     }
 }
 
@@ -522,6 +507,28 @@ impl VActual {
 impl Datagram for VActual {
     fn read_reg_addr() -> u8 {
         0x22
+    }
+}
+
+/// A struct representing the VACTUAL register.
+#[derive(PackedStruct, Default)]
+#[packed_struct(size_bytes = "4", bit_numbering = "lsb0", endian = "msb")]
+pub struct TCoolThrs {
+    #[packed_field(bits = "0..=19")]
+    pub tcoolthrs: Integer<u32, Bits<24>>,
+}
+
+impl TCoolThrs {
+    pub fn new(v: u32) -> Self {
+        TCoolThrs {
+            tcoolthrs: v.into(),
+        }
+    }
+}
+
+impl Datagram for TCoolThrs {
+    fn read_reg_addr() -> u8 {
+        0x14
     }
 }
 

@@ -3,15 +3,15 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::filament_sensor::BuddyFilamentSensor};
+use embassy_buddy::{BoardBuilder, BuddyFilamentSensor};
 use embassy_executor::Spawner;
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let f = Board::init_filament_sensor(p.PB4, p.EXTI4);
+    let board = BoardBuilder::default().filament_sensor(true).build().await;
+    let f = board.filament_sensor.unwrap();
 
     let fut = filament_interrupt(f);
     fut.await;

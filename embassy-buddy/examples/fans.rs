@@ -4,7 +4,7 @@
 use cortex_m::asm::nop;
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::fans::BuddyFan};
+use embassy_buddy::{BoardBuilder, BuddyFan};
 use embassy_executor::Spawner;
 use embassy_futures::join::join4;
 use embassy_time::Timer;
@@ -13,13 +13,18 @@ use panic_probe as _;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let f = Board::init_fans(p.PE11, p.PE10, p.EXTI10, p.PE9, p.PE14, p.EXTI14, p.TIM1);
+    let board = BoardBuilder::default()
+        .fan_0(true)
+        .fan_1(true)
+        .build()
+        .await;
+    let fan_0 = board.fan_0.unwrap();
+    let fan_1 = board.fan_1.unwrap();
 
-    let fut_1 = cycle_fan(&f.fan_0, "Fan 0");
-    let fut_2 = cycle_fan(&f.fan_1, "Fan 1");
-    let fut_3 = speed_camera(&f.fan_0, "Fan 0");
-    let fut_4 = speed_camera(&f.fan_1, "Fan 1");
+    let fut_1 = cycle_fan(&fan_0, "Fan 0");
+    let fut_2 = cycle_fan(&fan_1, "Fan 1");
+    let fut_3 = speed_camera(&fan_0, "Fan 0");
+    let fut_4 = speed_camera(&fan_1, "Fan 1");
     let fut = join4(fut_1, fut_2, fut_3, fut_4);
     fut.await;
 }

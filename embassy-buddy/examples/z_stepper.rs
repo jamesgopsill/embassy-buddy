@@ -3,28 +3,37 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::steppers::BuddyStepperExti};
+use embassy_buddy::{BoardBuilder, BuddyStepperExti};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
-use embassy_tmc::direction::Direction;
+use embassy_tmc::{
+    direction::Direction,
+    tmc2209::{Gconf, Ioin},
+};
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let uart = Board::init_stepper_usart(p.USART2, p.PD5);
-    let stepper = Board::init_z_stepper(uart, p.PD2, p.PD4, p.PD15, p.PE5, p.EXTI5);
-    let ioin = stepper.read_ioin().await.unwrap();
+    let board = BoardBuilder::default().z_stepper(true).build().await;
+    let stepper = board.z_stepper.unwrap();
+
+    let mut ioin = Ioin::default();
+    stepper.read_register(&mut ioin).await.unwrap();
     info!("IOIN enn: {}", ioin.enn);
-    let mut gconf = stepper.read_gconf().await.unwrap();
+
+    let mut gconf = Gconf::default();
+    stepper.read_register(&mut gconf).await.unwrap();
     info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
     gconf.mstep_reg_select = false;
+
     info!("Writing Update");
-    stepper.write(&mut gconf).await.unwrap();
+    stepper.write_register(&mut gconf).await.unwrap();
+
     info!("Reading Updated GCONF");
-    let gconf = stepper.read_gconf().await.unwrap();
+    stepper.read_register(&mut gconf).await.unwrap();
     info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
+
     let fut = back_and_forth(&stepper);
     fut.await;
 }
@@ -41,7 +50,7 @@ async fn back_and_forth(stepper: &BuddyStepperExti<'_>) {
         }
         info!("CounterClockwise");
         stepper.set_direction(Direction::CounterClockwise).await;
-        for _ in 0..300 * microstep {
+        for _ in 0..200 * microstep {
             stepper.try_step().unwrap();
             Timer::after_micros(100).await
         }

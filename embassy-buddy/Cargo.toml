@@ -12,6 +12,9 @@ documentation = "https://docs.rs/embassy-buddy"
 categories = ["no-std", "embedded"]
 exclude = ["/tmp", "/.zed", "/examples"]
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "katex-header.html"]
+
 [lib]
 
 [profile.release]
@@ -47,11 +50,6 @@ embassy-net = { version = "0.7.0", features = [
 embassy-time = { version = "0.4.0", features = [
     "defmt",
     "defmt-timestamp-uptime",
-    # Currently limited by 16-bit timer implementation
-    # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
-    # Runs well in release mode.
-    "tick-hz-32_768", # Recommended
-    #"tick-hz-80_000",
 ] }
 embassy-tmc = { path = "../embassy-tmc", features = ["defmt"] }
 libm = "0.2.11"
@@ -79,3 +77,13 @@ embassy-executor = { version = "0.7.0", features = [
 ] }
 embedded-graphics = { version = "0.8.0" }
 heapless = { version = "0.8.0" }
+embassy-time = { version = "0.4.0", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+    # Currently limited by 16-bit timer implementation
+    # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
+    # Runs well in release mode.
+    #"tick-hz-32_768", # Recommended
+    "tick-hz-40_000",
+    #"tick-hz-80_000",
+] }

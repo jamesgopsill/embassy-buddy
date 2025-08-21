@@ -1,9 +1,6 @@
-#![allow(async_fn_in_trait)]
-use embassy_time::{Duration, Timer, WithTimeout};
-use embedded_io_async::{Read, Write};
 use packed_struct::PackedStructSlice;
 
-use crate::{errors::TMCError, tmc2209::IfCnt};
+use crate::errors::TMCError;
 
 /// A byte the synchronises the communications between host and driver.
 const SYNC_BYTE: u8 = 0x05;
@@ -22,86 +19,12 @@ pub trait Datagram: PackedStructSlice + Default {
     }
 
     /// Create a read register request.
-    fn read_request(motor_addr: u8) -> Result<[u8; 4], TMCError> {
-        if motor_addr > 3 {
-            return Err(TMCError::InvalidDriverAddress(motor_addr));
+    fn read_request(&self, addr: u8) -> Result<[u8; 4], TMCError> {
+        if addr > 3 {
+            return Err(TMCError::InvalidDriverAddress(addr));
         }
-        let crc = crc8_atm(&[SYNC_BYTE, motor_addr, Self::read_reg_addr()]);
-        Ok([SYNC_BYTE, motor_addr, Self::read_reg_addr(), crc])
-    }
-
-    /// Performs a read request on the given driver usart and address. Expects ReadBack mode on the usart.
-    async fn read<T: Read + Write>(usart: &mut T, addr: u8) -> Result<Self, TMCError> {
-        let datagram = Self::read_request(addr)?;
-        //info!("[TMC] Read Request: {}", datagram);
-        if usart.write_all(datagram.as_slice()).await.is_err() {
-            return Err(TMCError::UsartError);
-        }
-
-        // Expect readback mode so 12 bytes (4 read request + 8 response).
-        let mut buf: [u8; 12] = [0u8; 12];
-        if usart
-            .read_exact(&mut buf)
-            .with_timeout(Duration::from_secs(1))
-            .await
-            .is_err()
-        {
-            info!("[TIMEOUT] {}", buf);
-            return Err(TMCError::TimeoutError);
-        };
-        //info!("[TMC] Request + Response: {}", buf);
-        // Adding in a delay to let things clear.
-        Timer::after_millis(5).await;
-        let msg = &buf[4..];
-        Self::from_datagram(msg)
-    }
-
-    /// Performs a write request to write a datagram to the driver register. Expects ReadBack mode on the usart.
-    async fn write<T: Read + Write>(&mut self, usart: &mut T, addr: u8) -> Result<(), TMCError> {
-        let ifcnt_before = IfCnt::read(usart, addr).await?;
-        // info!("[TMC] IFCNT before: {:?}", ifcnt_before);
-        let datagram_1 = self.as_write_request(addr)?;
-        let datagram_2 = IfCnt::read_request(addr)?;
-        // info!("[TMC] Write Request: {:?}", datagram);
-
-        if usart.write(datagram_1.as_slice()).await.is_err() {
-            return Err(TMCError::UsartError);
-        }
-
-        // Check it was successful
-        if usart.write(datagram_2.as_slice()).await.is_err() {
-            return Err(TMCError::UsartError);
-        }
-
-        // Buffer is 8 write request + 4 read request + 8 response.
-        let mut buf: [u8; 20] = [0u8; 20];
-        if usart
-            .read_exact(&mut buf)
-            .with_timeout(Duration::from_secs(1))
-            .await
-            .is_err()
-        {
-            info!("[TIMEOUT] {}", buf);
-            return Err(TMCError::TimeoutError);
-        };
-        //Timer::after_millis(1).await;
-        //info!("[TMC] Write + IfCnt + Response: {}", buf);
-        let msg = &buf[12..];
-        let ifcnt_after = IfCnt::from_datagram(msg)?;
-        Timer::after_millis(5).await;
-        //info!("[TMC] IFCNT after: {:?}", ifcnt_after);
-
-        // The ifcnt wraps if it goes over `u8::MAX` so we need to
-        // check if it is either greater than the previous value
-        // and if the previous value is `u8::MAX` then check if the
-        // count has wrapped.
-        if ifcnt_after.cnt > ifcnt_before.cnt
-            || (ifcnt_before.cnt == u8::MAX && ifcnt_after.cnt == 0)
-        {
-            Ok(())
-        } else {
-            Err(TMCError::WriteError(ifcnt_before.cnt, ifcnt_after.cnt))
-        }
+        let crc = crc8_atm(&[SYNC_BYTE, addr, Self::read_reg_addr()]);
+        Ok([SYNC_BYTE, addr, Self::read_reg_addr(), crc])
     }
 
     /// Transforms a Datagram into a write request.
@@ -132,6 +55,12 @@ pub trait Datagram: PackedStructSlice + Default {
             payload[3],
             crc,
         ])
+    }
+
+    fn update(&mut self, datagram: &[u8]) -> Result<(), TMCError> {
+        let new = Self::from_datagram(datagram)?;
+        *self = new;
+        Ok(())
     }
 
     /// Update this instance of the datagram by reading a &[u8]. For example, data received back from the uart.

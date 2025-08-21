@@ -3,16 +3,15 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::eeprom::Memory};
+use embassy_buddy::{BoardBuilder, components::eeprom::Memory};
 use embassy_executor::Spawner;
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-
-    let eeprom = Board::init_eeprom(p.I2C1, p.PB8, p.PB9, p.DMA1_CH6, p.DMA1_CH0);
+    let board = BoardBuilder::default().eeprom(true).build().await;
+    let eeprom = board.eeprom.unwrap();
 
     let byte = eeprom.current_address_read(Memory::User).await.unwrap();
     info!("User Memory Byte: {}", byte);

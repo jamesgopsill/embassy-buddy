@@ -3,35 +3,40 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::steppers::BuddyStepperExti};
+use embassy_buddy::{BoardBuilder, BuddyStepperExti};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
-use embassy_tmc::direction::Direction;
+use embassy_tmc::{
+    direction::Direction,
+    tmc2209::{ChopConf, Gconf, Ioin},
+};
 use panic_probe as _;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let uart = Board::init_stepper_usart(p.USART2, p.PD5);
-    let stepper = Board::init_x_stepper(uart, p.PD3, p.PD1, p.PD0, p.PE2, p.EXTI2);
-    let ioin = stepper.read_ioin().await.unwrap();
+    let board = BoardBuilder::default().x_stepper(true).build().await;
+    let stepper = board.x_stepper.unwrap();
+
+    let mut ioin = Ioin::default();
+    stepper.read_register(&mut ioin).await.unwrap();
     info!("IOIN enn: {}", ioin.enn);
-    let mut gconf = stepper.read_gconf().await.unwrap();
+    let mut gconf = Gconf::default();
+    stepper.read_register(&mut gconf).await.unwrap();
     info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
     gconf.mstep_reg_select = true;
     info!("Writing Update");
-    stepper.write(&mut gconf).await.unwrap();
+    stepper.write_register(&mut gconf).await.unwrap();
     info!("Reading Updated GCONF");
-    let gconf = stepper.read_gconf().await.unwrap();
+    stepper.read_register(&mut gconf).await.unwrap();
     info!("GCONF MSTEP: {:?}", gconf.mstep_reg_select);
 
-    let mut chopconf = stepper.read_chopconf().await.unwrap();
+    let mut chopconf = ChopConf::default();
+    stepper.read_register(&mut chopconf).await.unwrap();
     let mres: u8 = chopconf.mres.into();
     info!("CHOPCONF MRES: {:?}", mres);
-
     chopconf.mres = 4.into();
-    stepper.write(&mut chopconf).await.unwrap();
+    stepper.write_register(&mut chopconf).await.unwrap();
 
     let fut = back_and_forth(&stepper);
     fut.await;

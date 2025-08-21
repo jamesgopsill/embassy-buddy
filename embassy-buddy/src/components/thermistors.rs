@@ -1,3 +1,4 @@
+#![doc = include_str!("../../docs/thermistor.md")]
 use core::ops::DerefMut;
 
 use embassy_stm32::{adc::AnyAdcChannel, peripherals::ADC1};
@@ -9,26 +10,35 @@ use libm::log;
 
 use crate::components::adc::BuddyAdc;
 
+/// A convenience type to simplify the typing.
 pub type BuddyThermistor<'a> = Thermistor<'a, ThreadModeRawMutex>;
 
+/// A convenience struct to group the three thermistors to be added to the board struct.
 pub struct BuddyThermistors<'a> {
     pub bed: BuddyThermistor<'a>,
     pub board: BuddyThermistor<'a>,
     pub hotend: BuddyThermistor<'a>,
 }
 
+/// A struct handling the interactions with a pull-up thermistor.
 pub struct Thermistor<'a, M: RawMutex> {
+    /// Requires a reference to the ADC so we can sample the voltage.
     adc: &'a BuddyAdc<ADC1>,
-    // Wrapping a mutex so the thermistor
-    // can be a shared reference without needed to be mutable.
+    // Wrapping a mutex so the thermistor can be a shared reference without needed to be mutable.
+    /// The channel associated with the thermistor pin wrapped in a Mutex for interior mutability enable the Thermistor to be shared as a immutable reference.
     ch: Mutex<M, AnyAdcChannel<ADC1>>,
+    /// The pull-up resistor value in the circuit.
     pull_up_resistor: f64,
+    /// The beta value of the thermistor.
     beta: f64,
+    /// The reference resistance of the thermistor.
     r_ref: f64,
+    /// The reference temperature (usually 25C).
     t_ref: f64,
 }
 
 impl<'a, M: RawMutex> Thermistor<'a, M> {
+    /// Create a new Thermistor instance.
     pub fn new(
         adc: &'a BuddyAdc<ADC1>,
         ch: AnyAdcChannel<ADC1>,
@@ -47,8 +57,7 @@ impl<'a, M: RawMutex> Thermistor<'a, M> {
         }
     }
 
-    /// Read the thermistor temperature. This will return the
-    /// temperature and cache it for
+    /// Read the thermistor temperature waiting for the channel to lock. `embassy-time`'s `WithTimeout` functionality is useful to catch times where code has been waiting too long.
     pub async fn read(&self) -> f64 {
         let mut ch = self.ch.lock().await;
         let ch = ch.deref_mut();
@@ -62,6 +71,7 @@ impl<'a, M: RawMutex> Thermistor<'a, M> {
         1.0 / denom
     }
 
+    /// Try and immediatly read the Thermistor value.
     pub fn try_read(&self) -> Result<f64, TryLockError> {
         let mut ch = self.ch.try_lock()?;
         let sample = self.adc.try_blocking_read(ch.deref_mut())?;

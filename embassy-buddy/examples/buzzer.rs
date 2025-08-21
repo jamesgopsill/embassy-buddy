@@ -3,7 +3,7 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::buzzer::BuddyBuzzer};
+use embassy_buddy::{BoardBuilder, BuddyBuzzer};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use panic_probe as _;
@@ -11,8 +11,9 @@ use panic_probe as _;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let buzzer = Board::init_buzzer(p.PA0, p.TIM2);
+    let board = BoardBuilder::default().buzzer(true).build().await;
+    // We can unwrap it as we know we have built the board with it.
+    let buzzer = board.buzzer.unwrap();
     let fut = buzz(&buzzer);
     fut.await;
 }

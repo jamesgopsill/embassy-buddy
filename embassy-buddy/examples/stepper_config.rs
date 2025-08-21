@@ -3,50 +3,39 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::steppers::BuddySteppers};
+use embassy_buddy::{BoardBuilder, BuddyStepperExti};
 use embassy_executor::Spawner;
+use embassy_tmc::tmc2209::{ChopConf, Gconf};
 use panic_probe as _;
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) {
+async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-    let board = Board::new(&spawner, mac_addr).await;
-    configure(&board.steppers).await;
+    let board = BoardBuilder::default()
+        .x_stepper(true)
+        .y_stepper(true)
+        .z_stepper(true)
+        .e_stepper(true)
+        .build()
+        .await;
+    let x_stepper = board.x_stepper.unwrap();
+    let y_stepper = board.y_stepper.unwrap();
+    let z_stepper = board.z_stepper.unwrap();
+    configure(&x_stepper, "X").await;
+    configure(&y_stepper, "Y").await;
+    configure(&z_stepper, "Z").await;
     info!("Done")
 }
 
-async fn configure(steppers: &BuddySteppers<'_>) {
-    info!("Stepper X");
-    let mut gconf = steppers.x.read_gconf().await.unwrap();
+async fn configure(stepper: &BuddyStepperExti<'_>, label: &str) {
+    info!("Stepper {}", label);
+    let mut gconf = Gconf::default();
+    stepper.read_register(&mut gconf).await.unwrap();
     gconf.mstep_reg_select = true;
-    steppers.x.write(&mut gconf).await.unwrap();
-    let mut chopconf = steppers.x.read_chopconf().await.unwrap();
+    stepper.write_register(&mut gconf).await.unwrap();
+    let mut chopconf = ChopConf::default();
+    stepper.read_register(&mut chopconf).await.unwrap();
     chopconf.mres = 4.into();
-    steppers.x.write(&mut chopconf).await.unwrap();
+    stepper.write_register(&mut chopconf).await.unwrap();
     info!("Stepper Done");
-
-    info!("Stepper Y");
-    let mut gconf = steppers.y.read_gconf().await.unwrap();
-    gconf.mstep_reg_select = true;
-    steppers.y.write(&mut gconf).await.unwrap();
-    let mut chopconf = steppers.y.read_chopconf().await.unwrap();
-    chopconf.mres = 4.into();
-    steppers.y.write(&mut chopconf).await.unwrap();
-
-    info!("Stepper Z");
-    let mut gconf = steppers.z.read_gconf().await.unwrap();
-    gconf.mstep_reg_select = true;
-    steppers.z.write(&mut gconf).await.unwrap();
-    let mut chopconf = steppers.z.read_chopconf().await.unwrap();
-    chopconf.mres = 4.into();
-    steppers.z.write(&mut chopconf).await.unwrap();
-
-    info!("Stepper E");
-    let mut gconf = steppers.e.read_gconf().await.unwrap();
-    gconf.mstep_reg_select = true;
-    steppers.e.write(&mut gconf).await.unwrap();
-    let mut chopconf = steppers.e.read_chopconf().await.unwrap();
-    chopconf.mres = 4.into();
-    steppers.e.write(&mut chopconf).await.unwrap();
 }

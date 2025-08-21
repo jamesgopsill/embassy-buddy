@@ -16,8 +16,10 @@ bind_interrupts!(struct Irqs {
     I2C1_ER => embassy_stm32::i2c::ErrorInterruptHandler<I2C1>;
 });
 
+/// A convenience type to represent the EEPROM type.
 pub type BuddyEeprom<'a> = St25dv<Stm32I2c<'a, embassy_stm32::mode::Async>, ThreadModeRawMutex>;
 
+/// A convenience function to initialise the eeprom on the buddy board.
 pub fn init_eeprom<'a>(
     peri: I2C1,
     scl: PB8,
@@ -39,8 +41,6 @@ pub fn init_eeprom<'a>(
     eeprom
 }
 
-/// A driver the ST25DVxx series of EEPROMs.
-/// Refs. https://www.st.com/resource/en/datasheet/st25dv04kc.pdf
 #[derive(Debug, Error)]
 pub enum St25dvError {
     #[error("Read Error")]
@@ -53,17 +53,21 @@ pub enum St25dvError {
     SequentialWritePayloadTooSmall,
 }
 
+/// The buddy board features a [ST25DV04KC](https://www.st.com/resource/en/datasheet/st25dv04kc.pdf) eeprom chip connected via I2C using PB8 (SCL) and PB9 (SDA) pins. This struct is an interface/driver for the EEPROM and should work with any of the ST25DVxx series of EEPROMs
 pub struct St25dv<T: I2c, M: RawMutex> {
+    /// Holds a Mutex for the I2C connection.
     i2c: Mutex<M, T>,
 }
 
 impl<T: I2c, M: RawMutex> St25dv<T, M> {
+    /// Create a new instance of the ST25DV interface.
     pub fn new(i2c: T) -> Self {
         Self {
             i2c: Mutex::new(i2c),
         }
     }
 
+    /// Turn on RF.
     pub async fn rf_on(&self) -> Result<(), St25dvError> {
         let ds = 0b0101_0001;
         let mut i2c = self.i2c.lock().await;
@@ -73,6 +77,7 @@ impl<T: I2c, M: RawMutex> St25dv<T, M> {
         Ok(())
     }
 
+    /// Turn off RF.
     pub async fn rf_off(&self) -> Result<(), St25dvError> {
         let ds = 0b0101_0101;
         let mut i2c = self.i2c.lock().await;
@@ -82,6 +87,7 @@ impl<T: I2c, M: RawMutex> St25dv<T, M> {
         Ok(())
     }
 
+    /// Read some memory out of the device.
     pub async fn sequential_current_read(
         &self,
         memory: Memory,
@@ -95,12 +101,14 @@ impl<T: I2c, M: RawMutex> St25dv<T, M> {
         Ok(())
     }
 
+    /// Read the current address out of the device.
     pub async fn current_address_read(&self, memory: Memory) -> Result<u8, St25dvError> {
         let mut data_out: [u8; 1] = [0; 1];
         self.sequential_current_read(memory, &mut data_out).await?;
         Ok(data_out[0])
     }
 
+    /// Read the memory from a specified starting point out of the device.
     pub async fn sequential_random_read(
         &self,
         memory: Memory,
@@ -119,6 +127,7 @@ impl<T: I2c, M: RawMutex> St25dv<T, M> {
         Ok(())
     }
 
+    /// Read a single address.
     pub async fn random_address_read(
         &self,
         memory: Memory,
@@ -161,6 +170,7 @@ impl<T: I2c, M: RawMutex> St25dv<T, M> {
         Ok(())
     }
 
+    /// Write a byte to a specific address.
     pub async fn byte_write(&self, memory: Memory, addr: u16, data: u8) -> Result<(), St25dvError> {
         let ds = memory.device_select_code();
         let data = [addr.to_le_bytes()[0], addr.to_le_bytes()[1], data];
@@ -172,6 +182,7 @@ impl<T: I2c, M: RawMutex> St25dv<T, M> {
     }
 }
 
+/// A representation of the different memory sections in the EEPROM.
 pub enum Memory {
     User,
     System,

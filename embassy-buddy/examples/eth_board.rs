@@ -2,41 +2,20 @@
 #![no_main]
 
 use defmt::*;
-use embassy_buddy::Board;
+use embassy_buddy::BoardBuilder;
 use embassy_executor::Spawner;
-use embassy_stm32::Config;
 use embassy_time::Duration;
 use picoserve::{make_static, routing::get};
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let mut config = Config::default();
-    {
-        use embassy_stm32::rcc::*;
-        config.rcc.hsi = true; // 16Mhz
-        config.rcc.pll_src = PllSource::HSI;
-        config.rcc.pll = Some(Pll {
-            prediv: PllPreDiv::DIV16,
-            mul: PllMul::MUL336,
-            divp: Some(PllPDiv::DIV2),
-            divq: None,
-            divr: None,
-        });
-        config.rcc.ahb_pre = AHBPrescaler::DIV1;
-        config.rcc.apb1_pre = APBPrescaler::DIV4;
-        config.rcc.apb2_pre = APBPrescaler::DIV2;
-        config.rcc.sys = Sysclk::PLL1_P;
-    }
-    let p = embassy_stm32::init(config);
-
     let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-
-    let stack = Board::init_ethernet(
-        &spawner, p.RNG, p.ETH, p.PA1, p.PA2, p.PC1, p.PA7, p.PC4, p.PC5, p.PB12, p.PB13, p.PB11,
-        mac_addr,
-    )
-    .await;
+    let board = BoardBuilder::default()
+        .ethernet(&spawner, mac_addr)
+        .build()
+        .await;
+    let stack = board.stack.unwrap();
 
     stack.wait_config_up().await;
 

@@ -1,9 +1,4 @@
-use embassy_stm32::{
-    gpio::OutputType,
-    peripherals::{PB0, PB1, TIM3},
-    time::khz,
-    timer::simple_pwm::{PwmPin, SimplePwm, SimplePwmChannel},
-};
+use embassy_stm32::{peripherals::TIM3, timer::simple_pwm::SimplePwmChannel};
 use embassy_sync::{
     blocking_mutex::raw::{RawMutex, ThreadModeRawMutex},
     mutex::{Mutex, TryLockError},
@@ -12,6 +7,7 @@ use embedded_hal::pwm::SetDutyCycle;
 
 pub type BuddyHeater<'a> = Heater<ThreadModeRawMutex, SimplePwmChannel<'a, TIM3>>;
 
+/*
 pub struct BuddyHeaters<'a> {
     pub bed: BuddyHeater<'a>,
     pub hotend: BuddyHeater<'a>,
@@ -34,6 +30,7 @@ pub(crate) fn init_heaters<'a>(bed: PB0, hotend: PB1, tim: TIM3) -> BuddyHeaters
     let hotend = Heater::new(channels.ch4);
     BuddyHeaters { bed, hotend }
 }
+*/
 
 pub struct Heater<M: RawMutex, T> {
     ch: Mutex<M, T>,

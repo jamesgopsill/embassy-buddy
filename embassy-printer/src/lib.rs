@@ -12,6 +12,9 @@ pub trait Printer {
     ) -> impl Future<Output = Result<(), Self::PrinterError>>;
 
     fn home(&self) -> impl Future<Output = Result<(), Self::HomeError>>;
+    fn home_x(&self) -> impl Future<Output = Result<(), Self::HomeError>>;
+    fn home_y(&self) -> impl Future<Output = Result<(), Self::HomeError>>;
+    fn home_z(&self) -> impl Future<Output = Result<(), Self::HomeError>>;
 }
 
 #[cfg(test)]

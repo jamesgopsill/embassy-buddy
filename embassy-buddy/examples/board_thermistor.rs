@@ -3,7 +3,7 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::thermistors::BuddyThermistor};
+use embassy_buddy::{BoardBuilder, BuddyThermistor};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use panic_probe as _;
@@ -11,9 +11,11 @@ use panic_probe as _;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let adc = Board::init_adc1(p.ADC1);
-    let probe = Board::init_default_board_thermistor(adc, p.PA5);
+    let board = BoardBuilder::default()
+        .board_thermistor(true, None, None, None)
+        .build()
+        .await;
+    let probe = board.board_thermistor.unwrap();
     let fut = temp(probe);
     fut.await;
 }

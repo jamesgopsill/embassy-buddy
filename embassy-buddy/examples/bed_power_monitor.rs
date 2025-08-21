@@ -3,7 +3,7 @@
 
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{Board, components::bed_power_monitor::BuddyBedPowerMonitor};
+use embassy_buddy::{BoardBuilder, BuddyBedPowerMonitor};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use panic_probe as _;
@@ -11,10 +11,11 @@ use panic_probe as _;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let adc = Board::init_adc1(p.ADC1);
-    let probe = Board::init_bed_power_monitor(p.PA3, adc);
-    let fut = monitor(probe);
+
+    let board = BoardBuilder::default().bed_power(true).build().await;
+    let power_monitor = board.bed_power.unwrap();
+
+    let fut = monitor(power_monitor);
     fut.await;
 }
 

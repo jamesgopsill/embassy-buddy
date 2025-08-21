@@ -4,10 +4,7 @@
 use core::fmt::Write;
 use defmt::info;
 use defmt_rtt as _;
-use embassy_buddy::{
-    Board,
-    components::{display::BuddyDisplay, thermistors::BuddyThermistor},
-};
+use embassy_buddy::{BoardBuilder, BuddyDisplay, BuddyThermistor};
 use embassy_executor::Spawner;
 use embassy_time::Timer;
 use embedded_graphics::{
@@ -24,10 +21,15 @@ use panic_probe as _;
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     info!("Booting...");
-    let p = embassy_stm32::init(Default::default());
-    let adc = Board::init_adc1(p.ADC1);
-    let probe = Board::init_default_bed_thermistor(adc, p.PA4);
-    let display = Board::init_display(p.SPI2, p.PB10, p.PC3, p.PC2, p.PC9, p.PD11, p.PC8);
+    let board = BoardBuilder::default()
+        // Using None will take the default values as reported in the prusa docs.
+        .bed_thermistor(true, None, None, None)
+        .display(true)
+        .build()
+        .await;
+    let probe = board.bed_thermistor.unwrap();
+    let display = board.display.unwrap();
+
     render_ferris(&display);
 
     let fut = temp(probe, &display);

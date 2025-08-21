@@ -1,10 +1,4 @@
-use embassy_stm32::{
-    exti::ExtiInput,
-    gpio::{OutputType, Pull},
-    peripherals::{EXTI10, EXTI14, PE9, PE10, PE11, PE14, TIM1},
-    time::khz,
-    timer::simple_pwm::{PwmPin, SimplePwm, SimplePwmChannel},
-};
+use embassy_stm32::{exti::ExtiInput, peripherals::TIM1, timer::simple_pwm::SimplePwmChannel};
 use embassy_sync::{
     blocking_mutex::raw::{RawMutex, ThreadModeRawMutex},
     mutex::{Mutex, TryLockError},
@@ -14,41 +8,6 @@ use embedded_hal::pwm::SetDutyCycle;
 use embedded_hal_async::digital::Wait;
 
 pub type BuddyFan<'a> = Fan<ThreadModeRawMutex, SimplePwmChannel<'a, TIM1>, ExtiInput<'a>>;
-
-pub struct BuddyFans<'a> {
-    pub fan_0: BuddyFan<'a>,
-    pub fan_1: BuddyFan<'a>,
-}
-
-pub(crate) fn init_fans<'a>(
-    fan_0_pwm: PE11,
-    fan_0_inp: PE10,
-    fan_0_exti: EXTI10,
-    fan_1_pwm: PE9,
-    fan_1_inp: PE14,
-    fan_1_exti: EXTI14,
-    tim: TIM1,
-) -> BuddyFans<'a> {
-    let fan_0_pwm_pin = PwmPin::new_ch2(fan_0_pwm, OutputType::PushPull);
-    let fan_1_pwm_pin = PwmPin::new_ch1(fan_1_pwm, OutputType::PushPull);
-    let pwm = SimplePwm::new(
-        tim,
-        Some(fan_1_pwm_pin),
-        Some(fan_0_pwm_pin),
-        None,
-        None,
-        khz(21),
-        Default::default(),
-    );
-    let fan_0_exti = ExtiInput::new(fan_0_inp, fan_0_exti, Pull::Down);
-    let fan_1_exti = ExtiInput::new(fan_1_inp, fan_1_exti, Pull::Down);
-    let mut channels = pwm.split();
-    channels.ch1.enable();
-    channels.ch2.enable();
-    let fan_0 = Fan::new(channels.ch2, fan_0_exti);
-    let fan_1 = Fan::new(channels.ch1, fan_1_exti);
-    BuddyFans { fan_0, fan_1 }
-}
 
 pub struct Fan<M: RawMutex, T1, T2> {
     ch: Mutex<M, T1>,
@@ -168,3 +127,42 @@ impl<M: RawMutex, T1, T2: Wait> Fan<M, T1, T2> {
         }
     }
 }
+
+/*
+
+pub struct BuddyFans<'a> {
+    pub fan_0: BuddyFan<'a>,
+    pub fan_1: BuddyFan<'a>,
+}
+
+pub(crate) fn init_fans<'a>(
+    fan_0_pwm: PE11,
+    fan_0_inp: PE10,
+    fan_0_exti: EXTI10,
+    fan_1_pwm: PE9,
+    fan_1_inp: PE14,
+    fan_1_exti: EXTI14,
+    tim: TIM1,
+) -> BuddyFans<'a> {
+    let fan_0_pwm_pin = PwmPin::new_ch2(fan_0_pwm, OutputType::PushPull);
+    let fan_1_pwm_pin = PwmPin::new_ch1(fan_1_pwm, OutputType::PushPull);
+    let pwm = SimplePwm::new(
+        tim,
+        Some(fan_1_pwm_pin),
+        Some(fan_0_pwm_pin),
+        None,
+        None,
+        khz(21),
+        Default::default(),
+    );
+    let fan_0_exti = ExtiInput::new(fan_0_inp, fan_0_exti, Pull::Down);
+    let fan_1_exti = ExtiInput::new(fan_1_inp, fan_1_exti, Pull::Down);
+    let mut channels = pwm.split();
+    channels.ch1.enable();
+    channels.ch2.enable();
+    let fan_0 = Fan::new(channels.ch2, fan_0_exti);
+    let fan_1 = Fan::new(channels.ch1, fan_1_exti);
+    BuddyFans { fan_0, fan_1 }
+}
+
+*/
