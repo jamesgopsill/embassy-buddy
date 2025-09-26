@@ -1,5 +1,3 @@
-# embassy-buddy
-
 A [Board Support Package (BSP)](https://en.wikipedia.org/wiki/Board_support_package) for the Prusa Buddy board that powers [Prusa's](https://www.prusa3d.com/) Mini Additive Manufacturing (AM) machine (thank you for keeping the software/hardware docs open so I could make this happen!). I have had a great time implementing the board in Rust and against the [Embassy](https://embassy.dev/) framework that provides an async runtime for embedded devices.
 
 ![Prusa Buddy Board](https://cdn.help.prusa3d.com/wp-content/uploads/2022/05/e00a02b5f924777e_painted.jpeg)
@@ -55,7 +53,7 @@ The image shows moving a jumper to a new location. Mine did not have this jumper
 
 The ST-LINK/V2 connects the PC to the buddy board. The figure below shows the necessary wiring to create the SWD link the `probe-rs` will use the write our code to the device and to provide logging through RTT so we can interrogate what is happening through the terminal.
 
-**TODO**
+![Pinout](https://raw.githubusercontent.com/jamesgopsill/embassy-buddy/main/img/pinout.png)
 
 
 ## Adding some configuration
