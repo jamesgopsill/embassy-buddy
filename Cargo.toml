@@ -1,7 +1,7 @@
 [package]
 name = "embassy_buddy"
 version = "0.0.1"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 authors = ["James Gopsill"]
 description = "A board support crate for the Prusa Buddy Board."
@@ -9,42 +9,84 @@ repository = "https://github.com/jamesgopsill/embassy-buddy"
 readme = "README.md"
 keywords = ["MEX", "FDM"]
 documentation = "https://docs.rs/embassy-buddy"
-license-file = "LICENSE"
 categories = ["no-std", "embedded"]
-exclude = ["/tmp", "/.zed", "/examples"]
+exclude = ["/tmp", "/.zed", "/examples", "/docs", "/assets"]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "katex-header.html"]
 
 [lib]
 
-[dependencies]
-cortex-m-rt = "0.7.5"
-cortex-m = { version = "0.7.7", features = [
-	"inline-asm",
-	"critical-section-single-core",
-] }
-defmt = "0.3.10"
-defmt-rtt = "0.4.1"
-embassy-stm32 = { version = "0.2.0", features = [
-	"defmt",
-	"stm32f407vg",
-	"memory-x",
-	"time-driver-tim4",
-	"exti",
-] }
-embassy-executor = { version = "0.7.0", features = [
-	"task-arena-size-4096",
-	"arch-cortex-m",
-	"executor-thread",
-	"defmt",
-] }
-embassy-time = { version = "0.4.0", features = [
-	"defmt",
-	"defmt-timestamp-uptime",
-	"tick-hz-32_768",
-] }
-embassy-sync = { version = "0.6.2", features = ["defmt"] }
-panic-probe = { version = "0.3.2", features = ["print-defmt"] }
-libm = "0.2.11"
-packed_struct = { version = "0.10.1", default-features = false }
+[features]
+default = []
+defmt = []
 
 [profile.release]
 debug = 2
+
+# Updating dev profile to be similar to release.
+# https://doc.rust-lang.org/cargo/reference/profiles.html
+[profile.dev]
+opt-level = 3
+debug = 2
+codegen-units = 16
+
+[dependencies]
+defmt = "0.3.10"
+embassy-stm32 = { version = "0.2.0", features = [
+    "defmt",
+    "stm32f407vg",
+    "memory-x",
+    "time-driver-tim4",
+    "exti",
+] }
+embassy-sync = { version = "0.7.0" }
+embassy-futures = "0.1.1"
+embedded-hal = "1.0.0"
+embedded-hal-async = "1.0.0"
+embedded-io-async = "0.6.1"
+embassy-net = { version = "0.7.0", features = [
+    "defmt",
+    "tcp",
+    "dhcpv4",
+    "medium-ethernet",
+] }
+embassy-time = { version = "0.4.0", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+] }
+libm = "0.2.11"
+packed_struct = { version = "0.10.1", default-features = false }
+thiserror = { version = "2.0.12", default-features = false }
+embassy-executor = { version = "0.7.0", features = [] }
+static_cell = { version = "2.1.0" }
+mipidsi = "0.9.0"
+
+[dev-dependencies]
+cortex-m-rt = "0.7.5"
+cortex-m = { version = "0.7.7", features = [
+    "inline-asm",
+    "critical-section-single-core",
+] }
+defmt-rtt = "0.4.1"
+panic-probe = { version = "0.3.2", features = ["print-defmt"] }
+picoserve = { version = "0.16.0", features = ["embassy"] }
+embassy-executor = { version = "0.7.0", features = [
+    "task-arena-size-32768",
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+    "defmt",
+] }
+embedded-graphics = { version = "0.8.0" }
+heapless = { version = "0.8.0" }
+embassy-time = { version = "0.4.0", features = [
+    "defmt",
+    "defmt-timestamp-uptime",
+    # Currently limited by 16-bit timer implementation
+    # https://docs.embassy.dev/embassy-stm32/git/stm32f407vg/index.html
+    # Runs well in release mode.
+    #"tick-hz-32_768", # Recommended
+    "tick-hz-40_000",
+    #"tick-hz-80_000",
+] }
