@@ -23,6 +23,7 @@ A [Board Support Package (BSP)](https://en.wikipedia.org/wiki/Board_support_pack
 ## TODO
 
 - USBHost and Mass Storage
+- ESP32 WiFi add-on
 
 # Starting a project with the BSP
 

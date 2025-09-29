@@ -1,6 +1,6 @@
 [package]
 name = "embassy_buddy"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 license = "MIT"
 authors = ["James Gopsill"]
@@ -8,12 +8,13 @@ description = "A board support crate for the Prusa Buddy Board."
 repository = "https://github.com/jamesgopsill/embassy-buddy"
 readme = "README.md"
 keywords = ["MEX", "FDM"]
-documentation = "https://docs.rs/embassy-buddy"
 categories = ["no-std", "embedded"]
-exclude = ["/tmp", "/.zed", "/examples", "/assets", "/img"]
+exclude = ["tmp", ".zed", "assets", "img", "examples", "docs"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "katex-header.html"]
+default-target = "thumbv7em-none-eabi"
+targets = []
 
 [lib]
 
