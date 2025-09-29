@@ -9,7 +9,7 @@ repository = "https://github.com/jamesgopsill/embassy-buddy"
 readme = "README.md"
 keywords = ["MEX", "FDM"]
 categories = ["no-std", "embedded"]
-exclude = ["tmp", ".zed", "assets", "img", "examples", "docs"]
+exclude = ["tmp", ".zed", "assets", "img"]
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", "katex-header.html"]
